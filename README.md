@@ -1,6 +1,6 @@
 # Fangz
 
-Zig CLI library.
+Fangz is a Zig CLI library inspired by Cobra (Go), which includes a CLI for building your own CLI applications as well as the library itself.
 
 ## Usage
 
@@ -11,7 +11,7 @@ Check `src/tests/` for usage examples.
 - [Yazap](https://github.com/prajwalch/yazap): Forked from.
 - [Cobra](https://github.com/spf13/cobra): As inpiration.
 
-## Key Features:
+## Key Features
 
 - [**Options (short and long)**](#adding-arguments):
   - Providing values with `=`, space, or no space (`-f=value`, `-f value`, `-fvalue`).
@@ -35,7 +35,7 @@ Check `src/tests/` for usage examples.
 - **Custom Argument definition**:
   - Define custom [Argument](/src/Arg.zig) types for specific application requirements.
 
-## Limitations:
+## Limitations
 
 - [ ] Does not support delimiter-separated values using space (`-f v1,v2,v3`).
 - [ ] Does not support providing value and delimiter-separated values for multiple chained options using space (`-abc value, -abc v1,v2,v3`).
