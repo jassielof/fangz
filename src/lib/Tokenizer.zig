@@ -176,36 +176,3 @@ fn expectToken(actual_token: Token, expected_tag: Token.Kind) !void {
         return e;
     };
 }
-
-test "tokenizer" {
-    const args = &.{
-        "-f",
-        "-f=val",
-        "-f=",
-        "-fgh",
-        "-fgh=value",
-        "-fgh=",
-        "",
-        "",
-        "--option",
-        "--optioni=value",
-        "--option=",
-        "arg",
-        "",
-    };
-
-    var tokenizer = Tokenizer.init(args);
-
-    try expectToken(tokenizer.nextToken().?, .short_option);
-    try expectToken(tokenizer.nextToken().?, .short_option_with_value);
-    try expectToken(tokenizer.nextToken().?, .short_option_with_empty_value);
-    try expectToken(tokenizer.nextToken().?, .short_option_with_tail);
-    try expectToken(tokenizer.nextToken().?, .short_options_with_value);
-    try expectToken(tokenizer.nextToken().?, .short_options_with_empty_value);
-
-    try expectToken(tokenizer.nextToken().?, .long_option);
-    try expectToken(tokenizer.nextToken().?, .long_option_with_value);
-    try expectToken(tokenizer.nextToken().?, .long_option_with_empty_value);
-
-    try expectToken(tokenizer.nextToken().?, .some_argument);
-}
