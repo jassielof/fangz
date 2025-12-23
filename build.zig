@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zigit", .module = mod },
+                .{ .name = name, .module = mod },
             },
         }),
     });
