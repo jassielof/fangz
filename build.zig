@@ -1,60 +1,52 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const yazap = b.addModule("yazap", .{
-        .root_source_file = b.path("src/lib.zig"),
-        .target = b.graph.host,
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const name = "fangz";
+
+    const mod = b.addModule(name, .{
+        .root_source_file = b.path("src/lib/root.zig"),
+        .target = target,
     });
 
-    testStep(b);
-    examplesStep(b, yazap);
-}
-
-fn testStep(b: *std.Build) void {
-    // Test file information.
-    const test_module = b.addModule("test", .{
-        .root_source_file = b.path("src/test.zig"),
-        .target = b.graph.host,
+    const exe = b.addExecutable(.{
+        .name = name,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/cli/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zigit", .module = mod },
+            },
+        }),
     });
-    const tests = b.addTest(.{ .root_module = test_module });
-    // This runs the unit tests.
-    const runner = b.addRunArtifact(tests);
 
-    const step = b.step("test", "Run unit tests");
-    step.dependOn(&runner.step);
-}
+    b.installArtifact(exe);
+    const run_step = b.step("run", "Run the app");
 
-fn examplesStep(b: *std.Build, yazap: *std.Build.Module) void {
-    var dir = std.fs.cwd().openDir("./examples/", .{ .iterate = true }) catch return;
-    defer dir.close();
+    const run_cmd = b.addRunArtifact(exe);
+    run_step.dependOn(&run_cmd.step);
 
-    const step = b.step("examples", "Build all the examples");
-    var examples = dir.iterate();
+    run_cmd.step.dependOn(b.getInstallStep());
 
-    while (examples.next() catch @panic("failed to get example file")) |example_file| {
-        std.debug.assert(example_file.kind == .file);
-        // If not a .zig file, skip it
-        if (!std.mem.endsWith(u8, example_file.name, ".zig")) continue;
-
-        // Example file path.
-        const example_file_path = b.path(b.fmt("examples/{s}", .{example_file.name}));
-        // Example file name without extension.
-        const example_name = std.fs.path.stem(example_file_path.getDisplayName());
-
-        // Binary information of an example.
-        const example_exe_module = b.addModule(example_name, .{
-            .root_source_file = example_file_path,
-            .target = b.graph.host,
-        });
-        const executable = b.addExecutable(.{
-            .name = example_name,
-            .root_module = example_exe_module,
-        });
-        // Add yazap as a dependency.
-        executable.root_module.addImport("yazap", yazap);
-
-        // This copies the compiled binary to the `.zig-out/bin`.
-        const installer = b.addInstallArtifact(executable, .{});
-        step.dependOn(&installer.step);
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
     }
+
+    const docs = b.addInstallDirectory(.{
+        .source_dir = exe.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+
+    const docs_step = b.step("docs", "Generate documentation");
+    docs_step.dependOn(&docs.step);
+
+    const tests = b.addTest(.{ .root_module = b.createModule(.{ .root_source_file = b.path("src/tests/suite.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = name, .module = mod }} }) });
+    const run_tests = b.addRunArtifact(tests);
+
+    const test_step = b.step("tests", "Run tests");
+    test_step.dependOn(&run_tests.step);
 }
