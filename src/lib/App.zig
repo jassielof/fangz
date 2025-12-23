@@ -125,7 +125,7 @@ pub fn parseFrom(self: *App, argv: []const [:0]const u8) YazapError!ArgMatches {
     var result = parser.parse() catch |err| {
         // Don't clutter the test result with error messages.
         if (!builtin.is_test) {
-            try parser.perror.print();
+            try parser.perror.print(self.rootCommand());
         }
         return err;
     };

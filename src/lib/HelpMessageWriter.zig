@@ -17,6 +17,9 @@ writer: BufferedWriter = undefined,
 command: *const ParsedCommand = undefined,
 
 pub fn init(command: *const ParsedCommand, buffer: []u8) HelpMessageWriter {
+    // TODO: Use command's custom error writer (errOrStderr())
+    // This requires refactoring BufferedWriter to work with AnyWriter instead of File.Writer
+    // For now, we use stderr directly
     return HelpMessageWriter{
         .writer = .init(std.fs.File.stderr(), buffer),
         .command = command,

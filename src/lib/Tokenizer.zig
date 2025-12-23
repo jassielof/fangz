@@ -1,3 +1,4 @@
+//! Tokenizer for command line arguments.
 const Tokenizer = @This();
 
 const std = @import("std");

@@ -2,6 +2,7 @@ const ParseError = @This();
 
 const std = @import("std");
 const builtin = @import("builtin");
+const Command = @import("../Command.zig");
 
 /// Detailed information of error.
 context: Context,
@@ -17,10 +18,15 @@ pub fn setContext(self: *ParseError, ctx: Context) void {
 }
 
 /// Prints the error context in a nice error message.
-pub fn print(self: *const ParseError) PrintError!void {
-    var buffer: [1024]u8 = undefined;
-    var _writer = std.fs.File.stderr().writer(&buffer);
-    const writer = &_writer.interface;
+/// If command is provided, uses its custom error writer (traverses up parent chain if needed).
+pub fn print(self: *const ParseError, command: ?*const Command) PrintError!void {
+    // Use command's error writer if available, otherwise fall back to stderr
+    const err_writer = if (command) |cmd| cmd.errOrStderr() else blk: {
+        var buffer: [0]u8 = undefined;
+        const writer = std.fs.File.stderr().writer(&buffer);
+        break :blk std.io.wrapWriter(writer);
+    };
+    const writer = &err_writer;
 
     // Print the error prefix for nicer output.
     try writer.writeAll("error: ");
@@ -32,14 +38,14 @@ pub fn print(self: *const ParseError) PrintError!void {
             }
             return;
         },
-        .unrecognized_command => |command| {
-            try writer.print("unrecognized command '{s}'\n", .{command});
+        .unrecognized_command => |cmd_name| {
+            try writer.print("unrecognized command '{s}'\n", .{cmd_name});
         },
-        .positional_argument_not_provided => |command| {
-            try writer.print("positional argument is missing for command '{s}'\n", .{command});
+        .positional_argument_not_provided => |cmd_name| {
+            try writer.print("positional argument is missing for command '{s}'\n", .{cmd_name});
         },
-        .subcommand_not_provided => |command| {
-            try writer.print("subcommand is missing for command '{s}'\n", .{command});
+        .subcommand_not_provided => |cmd_name| {
+            try writer.print("subcommand is missing for command '{s}'\n", .{cmd_name});
         },
         .unrecognized_option => |option| {
             try writer.print("unrecognized option '{s}'\n", .{option});
