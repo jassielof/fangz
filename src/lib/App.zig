@@ -1,0 +1,209 @@
+//! High-level application orchestrator for Fangz.
+//!
+//! `App` owns the root command tree, parses argv input, executes hook
+//! lifecycles, and provides convenience helpers for help, errors, completions,
+//! and documentation generation.
+
+const App = @This();
+
+const std = @import("std");
+const Command = @import("Command.zig");
+const FangzError = @import("error.zig").FangzError;
+const Completion = @import("Completion.zig");
+const DocGenerator = @import("DocGenerator.zig");
+const HelpRenderer = @import("HelpRenderer.zig");
+const ParseContext = @import("ParseContext.zig");
+const Parser = @import("Parser.zig");
+const Style = @import("Style.zig").Style;
+
+allocator: std.mem.Allocator,
+root_command: Command,
+last_context: ?ParseContext = null,
+completions_enabled: bool = true,
+completion_registered: bool = false,
+
+pub const Init = struct {
+    name: []const u8,
+    description: []const u8 = "",
+    version: ?[]const u8 = null,
+};
+
+/// Constructs an application with a root command.
+pub fn init(allocator: std.mem.Allocator, cfg: Init) FangzError!App {
+    return .{
+        .allocator = allocator,
+        .root_command = try Command.init(allocator, .{
+            .name = cfg.name,
+            .description = cfg.description,
+            .version = cfg.version,
+        }),
+    };
+}
+
+/// Releases app-owned parse state and command tree memory.
+pub fn deinit(self: *App) void {
+    if (self.last_context) |*ctx| ctx.deinit();
+    self.root_command.deinit();
+}
+
+/// Returns the mutable root command.
+pub fn root(self: *App) *Command {
+    return &self.root_command;
+}
+
+/// Enables or disables built-in completion command registration.
+pub fn setCompletionsEnabled(self: *App, enabled: bool) void {
+    self.completions_enabled = enabled;
+}
+
+/// Parses explicit argv tokens and returns the active parse context.
+pub fn parseFrom(self: *App, argv: []const []const u8) FangzError!*ParseContext {
+    try self.ensureCompletionCommand();
+    if (self.last_context) |*ctx| ctx.deinit();
+    self.last_context = null;
+
+    const output = try Parser.parse(self.allocator, self.root(), argv);
+    self.last_context = output.context;
+    return &self.last_context.?;
+}
+
+/// Parses the current process argv and returns the parse context.
+pub fn parseProcess(self: *App) FangzError!*ParseContext {
+    const args_z = try std.process.argsAlloc(self.allocator);
+    defer std.process.argsFree(self.allocator, args_z);
+
+    var args = try std.ArrayList([]const u8).initCapacity(self.allocator, args_z.len -| 1);
+    defer args.deinit(self.allocator);
+    for (args_z[1..]) |arg| try args.append(self.allocator, arg);
+    return self.parseFrom(args.items);
+}
+
+/// Parses and executes command hooks for explicit argv input.
+pub fn executeFrom(self: *App, argv: []const []const u8) anyerror!void {
+    try self.ensureCompletionCommand();
+
+    if (self.completions_enabled and argv.len > 0 and std.mem.eql(u8, argv[0], "__complete")) {
+        try Completion.printDynamicSuggestions(self.root(), argv[1..]);
+        return;
+    }
+
+    if (argv.len == 0 and self.root().help_on_empty_args) {
+        try self.printHelp(self.root());
+        return;
+    }
+
+    const ctx = self.parseFrom(argv) catch |err| {
+        const parse_err: ?Parser.ParseError = switch (err) {
+            error.UnknownFlag => error.UnknownFlag,
+            error.UnknownCommand => error.UnknownCommand,
+            error.MissingFlagValue => error.MissingFlagValue,
+            error.MissingRequiredFlag => error.MissingRequiredFlag,
+            error.MissingRequiredPositional => error.MissingRequiredPositional,
+            error.TooManyPositionals => error.TooManyPositionals,
+            error.InvalidInt => error.InvalidInt,
+            error.InvalidFloat => error.InvalidFloat,
+            error.InvalidEnumValue => error.InvalidEnumValue,
+            error.UnexpectedValueForBool => error.UnexpectedValueForBool,
+            error.MutuallyExclusiveFlags => error.MutuallyExclusiveFlags,
+            else => null,
+        };
+        if (parse_err) |pe| {
+            var diag = try Parser.diagnoseError(self.allocator, self.root(), argv, pe);
+            defer diag.deinit();
+            try self.printError(diag.message, diag.hint);
+        }
+        return err;
+    };
+    if (ctx.help_requested) {
+        try self.printHelp(ctx.command);
+        return;
+    }
+    if (ctx.version_requested) {
+        try self.printVersion();
+        return;
+    }
+    try self.runHooks(ctx);
+}
+
+/// Parses and executes command hooks using current process argv.
+pub fn executeProcess(self: *App) anyerror!void {
+    const args_z = try std.process.argsAlloc(self.allocator);
+    defer std.process.argsFree(self.allocator, args_z);
+
+    var args = try std.ArrayList([]const u8).initCapacity(self.allocator, args_z.len -| 1);
+    defer args.deinit(self.allocator);
+    for (args_z[1..]) |arg| try args.append(self.allocator, arg);
+    try self.executeFrom(args.items);
+}
+
+/// Generates markdown docs for the current command tree.
+pub fn generateMarkdownDocs(self: *App, options: DocGenerator.Options) !void {
+    try DocGenerator.generateMarkdownDocs(self.allocator, self.root(), options);
+}
+
+/// Renders help text for the given command to stdout.
+pub fn printHelp(self: *App, command: *const Command) !void {
+    _ = self;
+    const style = Style.detect();
+    var stdout_buffer: [4096]u8 = undefined;
+    var out_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    try HelpRenderer.render(&out_writer.interface, command, style);
+    try out_writer.interface.flush();
+}
+
+/// Prints a styled error and optional hint to stderr.
+pub fn printError(self: *App, message: []const u8, hint: ?[]const u8) !void {
+    _ = self;
+    const style = Style.detect();
+    var stderr_buffer: [4096]u8 = undefined;
+    var err_writer = std.fs.File.stderr().writer(&stderr_buffer);
+    try err_writer.interface.print("{s}error:{s} {s}\n", .{
+        style.fg(.red),
+        style.reset(),
+        message,
+    });
+    if (hint) |h| {
+        try err_writer.interface.print("{s}hint:{s} {s}\n", .{
+            style.fg(.yellow),
+            style.reset(),
+            h,
+        });
+    }
+    try err_writer.interface.flush();
+}
+
+/// Executes persistent and local hook lifecycle around command run.
+fn runHooks(self: *App, ctx: *ParseContext) !void {
+    var chain = try ctx.command.collectAncestorPath(self.allocator);
+    defer chain.deinit(self.allocator);
+
+    for (chain.items) |cmd| {
+        if (cmd.hooks.persistent_pre_run) |f| try f(ctx);
+    }
+    if (ctx.command.hooks.pre_run) |f| try f(ctx);
+    if (ctx.command.hooks.run) |f| try f(ctx);
+    if (ctx.command.hooks.post_run) |f| try f(ctx);
+
+    var i = chain.items.len;
+    while (i > 0) : (i -= 1) {
+        const cmd = chain.items[i - 1];
+        if (cmd.hooks.persistent_post_run) |f| try f(ctx);
+    }
+}
+
+/// Prints root command version to stdout.
+fn printVersion(self: *App) !void {
+    const version = self.root().version orelse return;
+    var stdout_buffer: [256]u8 = undefined;
+    var out_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    try out_writer.interface.print("{s}\n", .{version});
+    try out_writer.interface.flush();
+}
+
+/// Lazily registers the built-in completion command when enabled.
+fn ensureCompletionCommand(self: *App) !void {
+    if (!self.completions_enabled) return;
+    if (self.completion_registered) return;
+    try Completion.registerCompletionCommand(self.root());
+    self.completion_registered = true;
+}
