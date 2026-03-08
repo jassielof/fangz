@@ -59,6 +59,11 @@ pub fn parse(allocator: std.mem.Allocator, root: *Command, argv: []const []const
     errdefer ctx.deinit();
     try applyDefaults(&ctx, dispatch.command);
 
+    if (dispatch.remaining.len == 0 and dispatch.command.help_on_empty_args) {
+        ctx.help_requested = true;
+        return .{ .context = ctx };
+    }
+
     var tokenizer = Tokenizer.init(dispatch.remaining);
     while (tokenizer.next()) |tok| {
         switch (tok.kind) {

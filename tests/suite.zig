@@ -23,6 +23,18 @@ test "dispatches nested subcommands with aliases" {
     try testing.expectEqualStrings("add", ctx.command.name);
 }
 
+test "help on empty args applies to selected subcommand" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    const info = try app.root().addSubcommand(.{ .name = "info", .description = "show info" });
+    info.setHelpOnEmptyArgs(true);
+
+    const ctx = try app.parseFrom(&.{"info"});
+    try testing.expectEqualStrings("info", ctx.command.name);
+    try testing.expect(ctx.help_requested);
+}
+
 test "short flag bundling parses char by char" {
     var app = try makeApp();
     defer app.deinit();
