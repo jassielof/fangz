@@ -23,7 +23,7 @@ jobs:
         uses: mlugg/setup-zig@v2
 
       - name: Formatting
-        run: zig fmt src/ tests/ build.zig build.zig.zon examples/
+        run: zig fmt .
 
       - name: Build
         run: zig build --summary all -Doptimize=ReleaseSafe
