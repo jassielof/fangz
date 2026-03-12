@@ -26,13 +26,13 @@ jobs:
         run: zig fmt .
 
       - name: Build
-        run: zig build --summary all -Doptimize=ReleaseSafe
+        run: zig build --summary all --release=safe
 
       - name: Tests
-        run: zig build --summary all tests -Doptimize=ReleaseSafe
+        run: zig build --summary all tests --release=safe
 
       - name: Build docs
-        run: zig build --summary all docs
+        run: zig build --summary all --release=fast docs
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
