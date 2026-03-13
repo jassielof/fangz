@@ -2,6 +2,11 @@
     .name = .fangz,
     .version = "0.1.0",
     .fingerprint = 0x8bef66fe5adfd67d,
+    .dependencies = .{.{
+        .carnaval = .{
+            .path = "modules/carnaval",
+        },
+    }},
     .paths = .{
         "build.zig",
         "build.zig.zon",

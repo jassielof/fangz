@@ -6,15 +6,15 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const lib_mod = b.addModule(mod_name, .{
+    const libary_module = b.addModule(mod_name, .{
         .root_source_file = b.path("src/lib/root.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const lib = b.addLibrary(.{
+    const documentation_library = b.addLibrary(.{
         .name = mod_name,
-        .root_module = lib_mod,
+        .root_module = libary_module,
     });
 
     const cli = b.addExecutable(.{
@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{
                     .name = mod_name,
-                    .module = lib_mod,
+                    .module = libary_module,
                 },
             },
         }),
@@ -45,7 +45,7 @@ pub fn build(b: *std.Build) void {
     }
 
     const docs = b.addInstallDirectory(.{
-        .source_dir = lib.getEmittedDocs(),
+        .source_dir = documentation_library.getEmittedDocs(),
         .install_dir = .prefix,
         .install_subdir = "docs",
     });
@@ -60,7 +60,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{.{
                 .name = mod_name,
-                .module = lib_mod,
+                .module = libary_module,
             }},
         }),
     });
