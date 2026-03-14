@@ -5,11 +5,20 @@ pub fn build(b: *std.Build) void {
 
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const carnaval_dep = b.dependency("carnaval", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const carnaval_mod = carnaval_dep.module("carnaval");
 
     const libary_module = b.addModule(mod_name, .{
         .root_source_file = b.path("src/lib/root.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{.{
+            .name = "carnaval",
+            .module = carnaval_mod,
+        }},
     });
 
     const documentation_library = b.addLibrary(.{

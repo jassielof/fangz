@@ -52,7 +52,9 @@ pub fn parse(allocator: std.mem.Allocator, root: *Command, argv: []const []const
 
     const dispatch = try walkCommandPath(allocator, root, argv);
     if (dispatch.help_for) |help_cmd| {
-        return .{ .context = try ParseContext.init(allocator, help_cmd), .failure = null };
+        var help_ctx = try ParseContext.init(allocator, help_cmd);
+        help_ctx.help_requested = true;
+        return .{ .context = help_ctx, .failure = null };
     }
 
     var ctx = try ParseContext.init(allocator, dispatch.command);

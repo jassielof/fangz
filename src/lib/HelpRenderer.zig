@@ -1,34 +1,45 @@
 //! Clap-style help renderer for Fangz command trees.
 
 const std = @import("std");
+const carnaval = @import("carnaval");
 const Command = @import("Command.zig");
-const Style = @import("Style.zig").Style;
+const ColorProfile = carnaval.ColorProfile;
 
 /// Renders command help sections to the provided writer.
-pub fn render(writer: anytype, command: *const Command, style: Style) !void {
-    try writer.print("{s}{s}{s}\n", .{ style.bold(), command.name, style.reset() });
+pub fn render(writer: anytype, command: *const Command, profile: ColorProfile) !void {
+    try carnaval.Style.init().bolded().renderWithProfile(command.name, writer, profile);
+    try writer.print("\n", .{});
     if (command.description.len > 0) {
         try writer.print("{s}\n", .{command.description});
     }
-    try renderUsage(writer, command, style);
+    const terminal_width = carnaval.terminalWidthForHandle(std.fs.File.stdout().handle);
+    try renderUsage(writer, command, profile);
 
     if (command.positionals.items.len > 0) {
-        try writer.print("\n{s}Arguments:{s}\n", .{ style.bold(), style.reset() });
-        try renderArguments(writer, command, style);
+        try writer.print("\n", .{});
+        try carnaval.Style.init().bolded().renderWithProfile("Arguments:", writer, profile);
+        try writer.print("\n", .{});
+        try renderArguments(writer, command, profile, terminal_width);
     }
 
     if (command.subcommands.items.len > 0) {
-        try writer.print("\n{s}Commands:{s}\n", .{ style.bold(), style.reset() });
-        try renderSubcommands(writer, command, style);
+        try writer.print("\n", .{});
+        try carnaval.Style.init().bolded().renderWithProfile("Commands:", writer, profile);
+        try writer.print("\n", .{});
+        try renderSubcommands(writer, command, profile, terminal_width);
     }
 
-    try writer.print("\n{s}Options:{s}\n", .{ style.bold(), style.reset() });
-    try renderFlags(writer, command, style);
+    try writer.print("\n", .{});
+    try carnaval.Style.init().bolded().renderWithProfile("Options:", writer, profile);
+    try writer.print("\n", .{});
+    try renderFlags(writer, command, profile, terminal_width);
 }
 
 /// Renders usage line for a command.
-fn renderUsage(writer: anytype, command: *const Command, style: Style) !void {
-    try writer.print("\n{s}Usage:{s} {s}", .{ style.bold(), style.reset(), command.name });
+fn renderUsage(writer: anytype, command: *const Command, profile: ColorProfile) !void {
+    try writer.print("\n", .{});
+    try carnaval.Style.init().bolded().renderWithProfile("Usage:", writer, profile);
+    try writer.print(" {s}", .{command.name});
     if (hasAnyOptions(command)) {
         try writer.print(" [OPTIONS]", .{});
     }
@@ -61,7 +72,7 @@ fn hasAnyOptions(command: *const Command) bool {
 }
 
 /// Renders positional arguments table-like list.
-fn renderArguments(writer: anytype, command: *const Command, style: Style) !void {
+fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize) !void {
     var spec_width: usize = 0;
     for (command.positionals.items) |arg| {
         var len = arg.name.len + 2;
@@ -85,17 +96,19 @@ fn renderArguments(writer: anytype, command: *const Command, style: Style) !void
 
         try printAlignedCommandRow(
             writer,
-            style,
+            profile,
             "  ",
             spec_buf[0..sbs.pos],
             desc_buf[0..dbs.pos],
             spec_width,
+            terminal_width,
+            command.allocator,
         );
     }
 }
 
 /// Renders grouped and ungrouped subcommand rows.
-fn renderSubcommands(writer: anytype, command: *const Command, style: Style) !void {
+fn renderSubcommands(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize) !void {
     var cmd_width: usize = "help".len;
     for (command.subcommands.items) |sub| {
         if (sub.name.len > cmd_width) cmd_width = sub.name.len;
@@ -115,11 +128,13 @@ fn renderSubcommands(writer: anytype, command: *const Command, style: Style) !vo
         if (!has_in_group) continue;
         rendered_group_section = true;
 
-        try writer.print("  {s}{s}:{s}\n", .{ style.bold(), group.title, style.reset() });
+        try writer.print("  ", .{});
+        try carnaval.Style.init().bolded().renderWithProfile(group.title, writer, profile);
+        try writer.print(":\n", .{});
         for (command.subcommands.items) |sub| {
             if (sub.group_id) |gid| {
                 if (std.mem.eql(u8, gid, group.id)) {
-                    try printAlignedCommandRow(writer, style, "    ", sub.name, sub.description, cmd_width);
+                    try printAlignedCommandRow(writer, profile, "    ", sub.name, sub.description, cmd_width, terminal_width, command.allocator);
                 }
             }
         }
@@ -128,21 +143,23 @@ fn renderSubcommands(writer: anytype, command: *const Command, style: Style) !vo
     const default_indent = if (rendered_group_section) "    " else "  ";
     for (command.subcommands.items) |sub| {
         if (sub.group_id != null) continue;
-        try printAlignedCommandRow(writer, style, default_indent, sub.name, sub.description, cmd_width);
+        try printAlignedCommandRow(writer, profile, default_indent, sub.name, sub.description, cmd_width, terminal_width, command.allocator);
     }
 
     try printAlignedCommandRow(
         writer,
-        style,
+        profile,
         default_indent,
         "help",
         "Print this message or the help of the given subcommand(s)",
         cmd_width,
+        terminal_width,
+        command.allocator,
     );
 }
 
 /// Renders command options including inherited persistent flags.
-fn renderFlags(writer: anytype, command: *const Command, style: Style) !void {
+fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize) !void {
     var spec_width: usize = 0;
     for (command.flags.items) |flag| {
         const len = optionSpecLen(flag);
@@ -167,7 +184,7 @@ fn renderFlags(writer: anytype, command: *const Command, style: Style) !void {
     }
 
     for (command.flags.items) |flag| {
-        try renderOneFlag(writer, flag, false, style, spec_width);
+        try renderOneFlag(writer, flag, false, profile, spec_width, terminal_width, command.allocator);
     }
 
     if (command.parent) |parent| {
@@ -176,14 +193,14 @@ fn renderFlags(writer: anytype, command: *const Command, style: Style) !void {
         for (chain.items) |ancestor| {
             for (ancestor.flags.items) |flag| {
                 if (!flag.persistent) continue;
-                try renderOneFlag(writer, flag, true, style, spec_width);
+                try renderOneFlag(writer, flag, true, profile, spec_width, terminal_width, command.allocator);
             }
         }
     }
 
-    try printAlignedOptionRow(writer, style, "-h, --help", "Print help", spec_width);
+    try printAlignedOptionRow(writer, profile, "-h, --help", "Print help", spec_width, terminal_width, command.allocator);
     if (command.rootConst().version != null) {
-        try printAlignedOptionRow(writer, style, "-V, --version", "Print version", spec_width);
+        try printAlignedOptionRow(writer, profile, "-V, --version", "Print version", spec_width, terminal_width, command.allocator);
     }
 }
 
@@ -192,8 +209,10 @@ fn renderOneFlag(
     writer: anytype,
     flag: Command.Flag,
     is_global: bool,
-    style: Style,
+    profile: ColorProfile,
     spec_width: usize,
+    terminal_width: usize,
+    allocator: std.mem.Allocator,
 ) !void {
     var spec_buf: [128]u8 = undefined;
     var spec_len: usize = 0;
@@ -259,7 +278,7 @@ fn renderOneFlag(
     }
     if (is_global) try d.print(" [global]", .{});
 
-    try printAlignedOptionRow(writer, style, spec_buf[0..spec_len], desc_buf[0..fbs.pos], spec_width);
+    try printAlignedOptionRow(writer, profile, spec_buf[0..spec_len], desc_buf[0..fbs.pos], spec_width, terminal_width, allocator);
 }
 
 /// Computes display width of an option specification string.
@@ -279,16 +298,15 @@ fn optionSpecLen(flag: Command.Flag) usize {
 /// Writes an aligned option row with compact gutter spacing.
 fn printAlignedOptionRow(
     writer: anytype,
-    style: Style,
+    profile: ColorProfile,
     spec: []const u8,
     desc: []const u8,
     spec_width: usize,
+    terminal_width: usize,
+    allocator: std.mem.Allocator,
 ) !void {
-    try writer.print("  {s}{s}{s}", .{
-        style.fg(.green),
-        spec,
-        style.reset(),
-    });
+    try writer.print("  ", .{});
+    try carnaval.Style.init().fg(.{ .ansi16 = .green }).renderWithProfile(spec, writer, profile);
 
     if (spec_width > spec.len) {
         var remaining = spec_width - spec.len;
@@ -298,24 +316,22 @@ fn printAlignedOptionRow(
     }
 
     const continuation_pad = 2 + spec_width + 2;
-    try printMultilineDescription(writer, desc, continuation_pad);
+    try printMultilineDescription(writer, desc, continuation_pad, terminal_width, allocator);
 }
 
 /// Writes an aligned command row with compact gutter spacing.
 fn printAlignedCommandRow(
     writer: anytype,
-    style: Style,
+    profile: ColorProfile,
     indent: []const u8,
     name: []const u8,
     desc: []const u8,
     name_width: usize,
+    terminal_width: usize,
+    allocator: std.mem.Allocator,
 ) !void {
-    try writer.print("{s}{s}{s}{s}", .{
-        indent,
-        style.fg(.cyan),
-        name,
-        style.reset(),
-    });
+    try writer.print("{s}", .{indent});
+    try carnaval.Style.init().fg(.{ .ansi16 = .cyan }).renderWithProfile(name, writer, profile);
 
     if (name_width > name.len) {
         var remaining = name_width - name.len;
@@ -325,29 +341,34 @@ fn printAlignedCommandRow(
     }
 
     const continuation_pad = indent.len + name_width + 2;
-    try printMultilineDescription(writer, desc, continuation_pad);
+    try printMultilineDescription(writer, desc, continuation_pad, terminal_width, allocator);
 }
 
 /// Prints first description line inline and aligns continuation lines.
-fn printMultilineDescription(writer: anytype, desc: []const u8, continuation_pad: usize) !void {
-    if (std.mem.indexOfScalar(u8, desc, '\n')) |idx| {
-        try writer.print("  {s}\n", .{desc[0..idx]});
-        var rest = desc[idx + 1 ..];
-        while (true) {
-            if (std.mem.indexOfScalar(u8, rest, '\n')) |next_idx| {
-                try printSpaces(writer, continuation_pad);
-                try writer.print("{s}\n", .{rest[0..next_idx]});
-                rest = rest[next_idx + 1 ..];
-            } else {
-                try printSpaces(writer, continuation_pad);
-                try writer.print("{s}\n", .{rest});
-                break;
-            }
-        }
+fn printMultilineDescription(
+    writer: anytype,
+    desc: []const u8,
+    continuation_pad: usize,
+    terminal_width: usize,
+    allocator: std.mem.Allocator,
+) !void {
+    if (desc.len == 0) {
+        try writer.print("\n", .{});
         return;
     }
 
-    try writer.print("  {s}\n", .{desc});
+    const max_desc_width = if (terminal_width > continuation_pad + 4) terminal_width - continuation_pad - 2 else 20;
+    const wrapped = try carnaval.wrap(desc, max_desc_width, 0, allocator);
+    defer allocator.free(wrapped);
+
+    var lines = std.mem.splitScalar(u8, wrapped, '\n');
+    if (lines.next()) |first| {
+        try writer.print("  {s}\n", .{first});
+    }
+    while (lines.next()) |line| {
+        try printSpaces(writer, continuation_pad);
+        try writer.print("{s}\n", .{line});
+    }
 }
 
 /// Writes `count` ASCII spaces.

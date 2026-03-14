@@ -7,6 +7,7 @@
 const App = @This();
 
 const std = @import("std");
+const carnaval = @import("carnaval");
 const Command = @import("Command.zig");
 const FangzError = @import("error.zig").FangzError;
 const Completion = @import("Completion.zig");
@@ -14,7 +15,6 @@ const DocGenerator = @import("DocGenerator.zig");
 const HelpRenderer = @import("HelpRenderer.zig");
 const ParseContext = @import("ParseContext.zig");
 const Parser = @import("Parser.zig");
-const Style = @import("Style.zig").Style;
 
 allocator: std.mem.Allocator,
 root_command: Command,
@@ -144,30 +144,24 @@ pub fn generateMarkdownDocs(self: *App, options: DocGenerator.Options) !void {
 /// Renders help text for the given command to stdout.
 pub fn printHelp(self: *App, command: *const Command) !void {
     _ = self;
-    const style = Style.detect();
+    const profile = carnaval.colorProfileForHandle(std.fs.File.stdout().handle);
     var stdout_buffer: [4096]u8 = undefined;
     var out_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    try HelpRenderer.render(&out_writer.interface, command, style);
+    try HelpRenderer.render(&out_writer.interface, command, profile);
     try out_writer.interface.flush();
 }
 
 /// Prints a styled error and optional hint to stderr.
 pub fn printError(self: *App, message: []const u8, hint: ?[]const u8) !void {
     _ = self;
-    const style = Style.detect();
+    const profile = carnaval.colorProfileForHandle(std.fs.File.stderr().handle);
     var stderr_buffer: [4096]u8 = undefined;
     var err_writer = std.fs.File.stderr().writer(&stderr_buffer);
-    try err_writer.interface.print("{s}error:{s} {s}\n", .{
-        style.fg(.red),
-        style.reset(),
-        message,
-    });
+    try carnaval.Style.init().fg(.{ .ansi16 = .red }).renderWithProfile("error:", &err_writer.interface, profile);
+    try err_writer.interface.print(" {s}\n", .{message});
     if (hint) |h| {
-        try err_writer.interface.print("{s}hint:{s} {s}\n", .{
-            style.fg(.yellow),
-            style.reset(),
-            h,
-        });
+        try carnaval.Style.init().fg(.{ .ansi16 = .yellow }).renderWithProfile("hint:", &err_writer.interface, profile);
+        try err_writer.interface.print(" {s}\n", .{h});
     }
     try err_writer.interface.flush();
 }
