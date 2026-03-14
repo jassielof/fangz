@@ -1,3 +1,12 @@
 [submodule "modules/carnaval"]
 	path = modules/carnaval
 	url = https://github.com/jassielof/carnaval
+[submodule "references/clap"]
+	path = references/clap
+	url = https://github.com/clap-rs/clap
+[submodule "references/typer"]
+	path = references/typer
+	url = https://github.com/fastapi/typer
+[submodule "references/cobra"]
+	path = references/cobra
+	url = https://github.com/spf13/cobra
