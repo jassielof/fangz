@@ -35,6 +35,29 @@ test "help on empty args applies to selected subcommand" {
     try testing.expect(ctx.help_requested);
 }
 
+test "help subcommand requests root help" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    _ = try app.root().addSubcommand(.{ .name = "status", .description = "show status" });
+
+    const ctx = try app.parseFrom(&.{"help"});
+    try testing.expect(ctx.help_requested);
+    try testing.expectEqualStrings("git", ctx.command.name);
+}
+
+test "help subcommand requests nested command help" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    const remote = try app.root().addSubcommand(.{ .name = "remote", .description = "remote ops" });
+    _ = try remote.addSubcommand(.{ .name = "add", .description = "add remote" });
+
+    const ctx = try app.parseFrom(&.{ "help", "remote", "add" });
+    try testing.expect(ctx.help_requested);
+    try testing.expectEqualStrings("add", ctx.command.name);
+}
+
 test "short flag bundling parses char by char" {
     var app = try makeApp();
     defer app.deinit();
