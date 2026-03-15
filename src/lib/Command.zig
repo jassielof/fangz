@@ -43,6 +43,35 @@ pub const Flag = struct {
     }
 };
 
+pub fn EnumFlagConfig(comptime EnumType: type) type {
+    return struct {
+        name: []const u8,
+        short: ?u8 = null,
+        description: []const u8 = "",
+        required: bool = false,
+        persistent: bool = false,
+        default_value: ?EnumType = null,
+    };
+}
+
+fn EnumTagNameTable(comptime EnumType: type) type {
+    const info = @typeInfo(EnumType);
+    if (info != .@"enum") {
+        @compileError("addEnumFlag expects an enum type");
+    }
+
+    return struct {
+        pub const values = blk: {
+            const fields = info.@"enum".fields;
+            var names: [fields.len][]const u8 = undefined;
+            for (fields, 0..) |field, i| {
+                names[i] = field.name;
+            }
+            break :blk names;
+        };
+    };
+}
+
 pub const Positional = struct {
     name: []const u8,
     description: []const u8 = "",
@@ -158,6 +187,25 @@ pub fn addFlag(self: *Command, flag: Flag) !void {
     try self.flags.append(self.allocator, flag);
     try self.flag_by_name.put(flag.name, idx);
     if (flag.short) |short| try self.flag_by_short.put(short, idx);
+}
+
+/// Adds a string-backed enum-like flag with allowed values derived from enum tags.
+pub fn addEnumFlag(self: *Command, comptime EnumType: type, cfg: EnumFlagConfig(EnumType)) !void {
+    const info = @typeInfo(EnumType);
+    if (info != .@"enum") {
+        @compileError("addEnumFlag expects an enum type");
+    }
+
+    try self.addFlag(.{
+        .name = cfg.name,
+        .short = cfg.short,
+        .description = cfg.description,
+        .value_type = .string,
+        .required = cfg.required,
+        .persistent = cfg.persistent,
+        .default_value = if (cfg.default_value) |v| .{ .string = @tagName(v) } else null,
+        .allowed_values = &EnumTagNameTable(EnumType).values,
+    });
 }
 
 /// Appends a positional argument definition to this command.

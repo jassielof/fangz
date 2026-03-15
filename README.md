@@ -2,8 +2,6 @@
 
 A CLI library for Zig.
 
-- [ ] completions should throw help if no argument is given.
-
 ## Credits
 
 - [Cobra](https://cobra.dev/)

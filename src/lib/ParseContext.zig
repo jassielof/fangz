@@ -78,6 +78,17 @@ pub fn stringFlag(self: *const ParseContext, name: []const u8) ?[]const u8 {
     };
 }
 
+/// Gets a parsed string flag converted to a typed enum.
+pub fn enumFlag(self: *const ParseContext, comptime EnumType: type, name: []const u8) ?EnumType {
+    const info = @typeInfo(EnumType);
+    if (info != .@"enum") {
+        @compileError("enumFlag expects an enum type");
+    }
+
+    const raw = self.stringFlag(name) orelse return null;
+    return std.meta.stringToEnum(EnumType, raw);
+}
+
 /// Gets a parsed integer flag value.
 pub fn intFlag(self: *const ParseContext, name: []const u8) ?i64 {
     const value = self.flags.get(name) orelse return null;

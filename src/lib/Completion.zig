@@ -26,6 +26,7 @@ pub fn registerCompletionCommand(root: *Command) !void {
         .value_type = .bool,
         .default_value = .{ .bool = false },
     });
+    completion.setHelpOnEmptyArgs(true);
     completion.setHooks(.{ .run = runCompletionCommand });
 }
 

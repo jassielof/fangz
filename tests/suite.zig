@@ -95,6 +95,45 @@ test "typed flags include defaults and required validation" {
     try testing.expectEqualStrings("json", ctx.stringFlag("format").?);
 }
 
+test "enum flag convenience parses default and explicit values" {
+    const Output = enum { json, table };
+
+    var app = try makeApp();
+    defer app.deinit();
+
+    try app.root().addEnumFlag(Output, .{
+        .name = "output",
+        .short = 'o',
+        .description = "Output format",
+        .default_value = .json,
+    });
+
+    const ctx_default = try app.parseFrom(&.{});
+    try testing.expectEqual(Output.json, ctx_default.enumFlag(Output, "output").?);
+
+    const ctx_explicit = try app.parseFrom(&.{ "--output", "table" });
+    try testing.expectEqual(Output.table, ctx_explicit.enumFlag(Output, "output").?);
+}
+
+test "enum flag rejects invalid value" {
+    const Output = enum { json, table };
+
+    var app = try makeApp();
+    defer app.deinit();
+
+    try app.root().addEnumFlag(Output, .{ .name = "output" });
+    try testing.expectError(error.InvalidEnumValue, app.parseFrom(&.{ "--output", "yaml" }));
+}
+
+test "completion command with no args requests help" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    const ctx = try app.parseFrom(&.{"completion"});
+    try testing.expect(ctx.help_requested);
+    try testing.expectEqualStrings("completion", ctx.command.name);
+}
+
 test "repeatable string list flag accumulates values" {
     var app = try makeApp();
     defer app.deinit();
