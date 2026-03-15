@@ -28,18 +28,34 @@ jobs:
         run: zig fmt .
 
       - name: Build
-        run: zig build --summary all --release=safe
-
-      - name: Tests
-        run: zig build --summary all tests --release=safe
+        run: zig build --summary all
 
       - name: Build docs
-        run: zig build --summary all --release=fast docs
+        run: zig build --summary all docs
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
           path: zig-out/docs
+  tests:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Run tests
+        run: zig build --summary all tests
 
   pages:
     environment:
