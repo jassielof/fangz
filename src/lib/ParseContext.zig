@@ -2,6 +2,21 @@
 //!
 //! This module stores resolved flags, positional values, and parse control
 //! signals like help/version requests.
+//!
+//! ## Lifetime and ownership
+//!
+//! `ParseContext` **borrows** from the argv slice it was parsed from.  Every
+//! `[]const u8` value stored here — flag strings, positional strings, and the
+//! key/value slices inside `KeyValuePair` — is a direct sub-slice of the
+//! original argv allocation.  No per-value string duplication is performed.
+//!
+//! Concretely, when called through `App.executeProcess` / `App.parseProcess`,
+//! the lifetime of these slices is tied to the `args_z` allocation inside
+//! those functions.  The `ParseContext` is handed to hooks *inside* that
+//! scope, so all borrows are valid for the duration of any hook callback.
+//!
+//! If you hold a `*ParseContext` obtained from `App.parseFrom` with a
+//! caller-owned argv slice, ensure the argv allocation outlives the context.
 
 const std = @import("std");
 const Command = @import("Command.zig");
@@ -12,11 +27,14 @@ pub const FlagValue = union(enum) {
     int: i64,
     float: f64,
     string_list: std.ArrayList([]const u8),
+    key_value_list: std.ArrayList(Command.KeyValuePair),
+    enum_tag: u32,
 
     /// Releases resources for heap-backed variants.
     pub fn deinit(self: *FlagValue, allocator: std.mem.Allocator) void {
         switch (self.*) {
             .string_list => |*values| values.deinit(allocator),
+            .key_value_list => |*values| values.deinit(allocator),
             else => {},
         }
     }
@@ -85,8 +103,11 @@ pub fn enumFlag(self: *const ParseContext, comptime EnumType: type, name: []cons
         @compileError("enumFlag expects an enum type");
     }
 
-    const raw = self.stringFlag(name) orelse return null;
-    return std.meta.stringToEnum(EnumType, raw);
+    const value = self.flags.get(name) orelse return null;
+    return switch (value) {
+        .enum_tag => |raw| @as(EnumType, @enumFromInt(raw)),
+        else => null,
+    };
 }
 
 /// Gets a parsed integer flag value.
@@ -116,8 +137,169 @@ pub fn stringListFlag(self: *const ParseContext, name: []const u8) ?[]const []co
     };
 }
 
+/// Gets parsed repeatable key/value pairs.
+pub fn keyValueFlag(self: *const ParseContext, name: []const u8) ?[]const Command.KeyValuePair {
+    const value = self.flags.get(name) orelse return null;
+    return switch (value) {
+        .key_value_list => |v| v.items,
+        else => null,
+    };
+}
+
 /// Gets positional token by zero-based index.
 pub fn positional(self: *const ParseContext, index: usize) ?[]const u8 {
     if (index >= self.positionals.items.len) return null;
     return self.positionals.items[index];
+}
+
+fn unwrapOptional(comptime T: type) type {
+    return switch (@typeInfo(T)) {
+        .optional => |info| info.child,
+        else => T,
+    };
+}
+
+fn isOptional(comptime T: type) bool {
+    return @typeInfo(T) == .optional;
+}
+
+fn isStringSlice(comptime T: type) bool {
+    const info = @typeInfo(T);
+    if (info != .pointer) return false;
+    const ptr = info.pointer;
+    return ptr.size == .slice and ptr.is_const and ptr.child == u8;
+}
+
+fn isStringListType(comptime T: type) bool {
+    const info = @typeInfo(T);
+    if (info != .pointer) return false;
+    const ptr = info.pointer;
+    return ptr.size == .slice and ptr.is_const and isStringSlice(ptr.child);
+}
+
+fn isKeyValueListType(comptime T: type) bool {
+    const info = @typeInfo(T);
+    if (info != .pointer) return false;
+    const ptr = info.pointer;
+    return ptr.size == .slice and ptr.is_const and ptr.child == Command.KeyValuePair;
+}
+
+fn assignFieldValue(
+    self: *const ParseContext,
+    out: anytype,
+    comptime field_name: []const u8,
+    comptime FieldType: type,
+) !bool {
+    var name_buf: [field_name.len]u8 = undefined;
+    inline for (field_name, 0..) |ch, i| {
+        name_buf[i] = if (ch == '_') '-' else ch;
+    }
+    const name = name_buf[0..];
+    const base = unwrapOptional(FieldType);
+
+    if (comptime isOptional(FieldType)) {
+        if (comptime @typeInfo(base) == .@"enum") {
+            if (self.enumFlag(base, name)) |value| {
+                @field(out.*, field_name) = value;
+                return true;
+            }
+            @field(out.*, field_name) = null;
+            return true;
+        }
+        if (comptime isStringSlice(base)) {
+            if (self.stringFlag(name)) |value| {
+                @field(out.*, field_name) = value;
+                return true;
+            }
+            @field(out.*, field_name) = null;
+            return true;
+        }
+        @compileError("unsupported optional field type in extract: " ++ @typeName(FieldType));
+    }
+
+    if (comptime FieldType == bool) {
+        if (self.boolFlag(name)) |value| {
+            @field(out.*, field_name) = value;
+            return true;
+        }
+        return false;
+    }
+    if (comptime FieldType == i64) {
+        if (self.intFlag(name)) |value| {
+            @field(out.*, field_name) = value;
+            return true;
+        }
+        return false;
+    }
+    if (comptime FieldType == f64) {
+        if (self.floatFlag(name)) |value| {
+            @field(out.*, field_name) = value;
+            return true;
+        }
+        return false;
+    }
+    if (comptime @typeInfo(FieldType) == .@"enum") {
+        if (self.enumFlag(FieldType, name)) |value| {
+            @field(out.*, field_name) = value;
+            return true;
+        }
+        return false;
+    }
+    if (comptime isStringSlice(FieldType)) {
+        if (self.stringFlag(name)) |value| {
+            @field(out.*, field_name) = value;
+            return true;
+        }
+        return false;
+    }
+    if (comptime isStringListType(FieldType)) {
+        if (self.stringListFlag(name)) |value| {
+            @field(out.*, field_name) = value;
+            return true;
+        }
+        return false;
+    }
+    if (comptime isKeyValueListType(FieldType)) {
+        if (self.keyValueFlag(name)) |value| {
+            @field(out.*, field_name) = value;
+            return true;
+        }
+        return false;
+    }
+
+    @compileError("unsupported extract field type: " ++ @typeName(FieldType));
+}
+
+/// Extracts typed arguments from parsed context into a struct.
+pub fn extract(self: *const ParseContext, comptime T: type) !T {
+    const info = @typeInfo(T);
+    if (info != .@"struct") {
+        @compileError("extract expects a struct type");
+    }
+
+    var out: T = undefined;
+    inline for (info.@"struct".fields) |field| {
+        const FieldType = field.type;
+
+        if (comptime std.mem.eql(u8, field.name, "positionals")) {
+            if (FieldType != []const []const u8) {
+                @compileError("field 'positionals' must be []const []const u8");
+            }
+            @field(out, field.name) = self.positionals.items;
+            continue;
+        }
+
+        const assigned = try assignFieldValue(self, &out, field.name, FieldType);
+        if (!assigned) {
+            if (field.defaultValue()) |default_ptr| {
+                @field(out, field.name) = default_ptr;
+            } else if (isOptional(FieldType)) {
+                @field(out, field.name) = null;
+            } else {
+                return error.MissingRequiredFlag;
+            }
+        }
+    }
+
+    return out;
 }

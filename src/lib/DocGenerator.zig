@@ -144,7 +144,7 @@ fn renderCommandMarkdown(
 
     try w.print("## Usage\n\n", .{});
     try w.print("`{s}", .{path_name});
-    if (hasAnyOptions(cmd)) try w.print(" [OPTIONS]", .{});
+    if (cmd.hasAnyOptions()) try w.print(" [OPTIONS]", .{});
     if (cmd.subcommands.items.len > 0) try w.print(" <COMMAND>", .{});
     for (cmd.positionals.items) |pos| {
         if (pos.variadic) {
@@ -221,7 +221,7 @@ fn appendOptionsTable(allocator: std.mem.Allocator, cmd: *const Command, w: anyt
     defer chain.deinit(allocator);
 
     for (chain.items) |ancestor| {
-        for (ancestor.flags.items) |flag| {
+        for (ancestor.flags.constSlice()) |flag| {
             if (ancestor != cmd and !flag.persistent) continue;
 
             const spec = try flagSpec(allocator, flag);
@@ -231,9 +231,11 @@ fn appendOptionsTable(allocator: std.mem.Allocator, cmd: *const Command, w: anyt
                 .int => "int",
                 .float => "float",
                 .string_list => "string[]",
+                .key_value_list => "key=value[]",
+                .enum_tag => "enum",
                 .bool => unreachable,
             };
-            const def = defaultText(flag.default_value);
+            const def = defaultText(flag);
             const scope = if (ancestor == cmd) "local" else "global";
             const desc = try optionDescription(allocator, flag);
             defer allocator.free(desc);
@@ -277,7 +279,7 @@ fn flagSpec(allocator: std.mem.Allocator, flag: Command.Flag) ![]u8 {
         return std.fmt.allocPrint(allocator, "-{c}, --{s} <{s}>", .{
             short,
             flag.name,
-            typeToken(flag.value_type),
+            if (flag.value_hint) |hint| hint else typeToken(flag.value_type),
         });
     }
 
@@ -286,7 +288,7 @@ fn flagSpec(allocator: std.mem.Allocator, flag: Command.Flag) ![]u8 {
     }
     return std.fmt.allocPrint(allocator, "--{s} <{s}>", .{
         flag.name,
-        typeToken(flag.value_type),
+        if (flag.value_hint) |hint| hint else typeToken(flag.value_type),
     });
 }
 
@@ -294,6 +296,8 @@ fn flagSpec(allocator: std.mem.Allocator, flag: Command.Flag) ![]u8 {
 fn typeToken(flag_type: Command.FlagType) []const u8 {
     return switch (flag_type) {
         .string, .string_list => "STRING",
+        .key_value_list => "KEY=VALUE",
+        .enum_tag => "VALUE",
         .int => "INT",
         .float => "FLOAT",
         .bool => "BOOL",
@@ -301,30 +305,27 @@ fn typeToken(flag_type: Command.FlagType) []const u8 {
 }
 
 /// Returns display text for default values in docs.
-fn defaultText(default_value: ?Command.DefaultValue) []const u8 {
-    if (default_value) |dv| {
-        return switch (dv) {
-            .bool => |v| if (v) "true" else "false",
-            .string => |v| v,
-            .int => "set",
-            .float => "set",
-            .string_list => "set",
-        };
-    }
-    return "-";
-}
-
-/// Returns true when options/help/version should be shown.
-fn hasAnyOptions(cmd: *const Command) bool {
-    if (cmd.flags.items.len > 0) return true;
-    if (cmd.rootConst().version != null) return true;
-    var current = cmd.parent;
-    while (current) |p| : (current = p.parent) {
-        for (p.flags.items) |flag| {
-            if (flag.persistent) return true;
-        }
-    }
-    return true;
+///
+/// For `enum_tag` flags the actual variant name is looked up from the flag's
+/// `allowed_values` / `enum_values` tables, matching the behaviour of the
+/// help renderer.
+fn defaultText(flag: Command.Flag) []const u8 {
+    const default_value = flag.default_value orelse return "-";
+    return switch (default_value) {
+        .bool => |v| if (v) "true" else "false",
+        .string => |v| v,
+        .int => "set",
+        .float => "set",
+        .enum_tag => |ordinal| blk: {
+            const names = flag.allowed_values orelse break :blk "set";
+            const ords = flag.enum_values orelse break :blk "set";
+            for (ords, 0..) |ord, i| {
+                if (ord == ordinal and i < names.len) break :blk names[i];
+            }
+            break :blk "set";
+        },
+        .string_list => "set",
+    };
 }
 
 /// Builds fully-qualified command path text from ancestry.

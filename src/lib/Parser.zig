@@ -19,6 +19,11 @@ pub const ParseError = error{
     InvalidInt,
     InvalidFloat,
     InvalidEnumValue,
+    KeyValueMissingEquals,
+    KeyValueEmptyKey,
+    KeyValueEmptyValue,
+    InvalidAllowedKey,
+    InvalidAllowedValue,
     UnexpectedValueForBool,
     MutuallyExclusiveFlags,
 };
@@ -48,7 +53,9 @@ pub const Diagnostic = struct {
 
 /// Parses argv against the command tree and returns a parse output context.
 pub fn parse(allocator: std.mem.Allocator, root: *Command, argv: []const []const u8) !ParseOutput {
-    try root.bindAliases();
+    // freeze() is called by App before parsing; fall back to bindAliases here
+    // only when Parser is used directly without going through App.
+    if (!root.frozen) try root.bindAliases();
 
     const dispatch = try walkCommandPath(allocator, root, argv);
     if (dispatch.help_for) |help_cmd| {
@@ -154,7 +161,7 @@ fn parseLongFlag(
     }
 
     const lookup = command.resolveFlagByName(name) orelse return ParseError.UnknownFlag;
-    const flag = lookup.command.flags.items[lookup.index];
+    const flag = lookup.command.flags.constSlice()[lookup.index];
     try parseFlagValue(allocator, ctx, flag, attached_value, tokenizer);
 }
 
@@ -186,7 +193,7 @@ fn parseShortBundle(
         }
 
         const lookup = command.resolveFlagByShort(ch) orelse return ParseError.UnknownFlag;
-        const flag = lookup.command.flags.items[lookup.index];
+        const flag = lookup.command.flags.constSlice()[lookup.index];
         if (!flag.takesValue()) {
             try setFlagValue(allocator, ctx, flag, .{ .bool = true });
             continue;
@@ -222,6 +229,18 @@ fn parseFlagValue(
             try validateEnum(flag, value);
             try setFlagValue(allocator, ctx, flag, .{ .string = value });
         },
+        .enum_tag => {
+            const value = attached_value orelse nextValueToken(tokenizer) orelse return ParseError.MissingFlagValue;
+            const allowed = flag.allowed_values orelse return ParseError.InvalidEnumValue;
+            const enum_values = flag.enum_values orelse return ParseError.InvalidEnumValue;
+            for (allowed, 0..) |candidate, i| {
+                if (std.mem.eql(u8, candidate, value)) {
+                    try setFlagValue(allocator, ctx, flag, .{ .enum_tag = enum_values[i] });
+                    return;
+                }
+            }
+            return ParseError.InvalidEnumValue;
+        },
         .int => {
             const raw = attached_value orelse nextValueToken(tokenizer) orelse return ParseError.MissingFlagValue;
             const parsed = std.fmt.parseInt(i64, raw, 10) catch return ParseError.InvalidInt;
@@ -249,6 +268,51 @@ fn parseFlagValue(
             var list = try std.ArrayList([]const u8).initCapacity(allocator, 0);
             try list.append(allocator, value);
             try ctx.flags.put(flag.name, .{ .string_list = list });
+        },
+        .key_value_list => {
+            const raw = attached_value orelse nextValueToken(tokenizer) orelse return ParseError.MissingFlagValue;
+            const eq_idx = std.mem.indexOfScalar(u8, raw, '=') orelse return ParseError.KeyValueMissingEquals;
+            const key = raw[0..eq_idx];
+            const value = raw[eq_idx + 1 ..];
+            if (key.len == 0) return ParseError.KeyValueEmptyKey;
+            if (value.len == 0) return ParseError.KeyValueEmptyValue;
+
+            if (flag.allowed_keys) |allowed_keys| {
+                var key_ok = false;
+                for (allowed_keys) |candidate| {
+                    if (std.mem.eql(u8, candidate, key)) {
+                        key_ok = true;
+                        break;
+                    }
+                }
+                if (!key_ok) return ParseError.InvalidAllowedKey;
+            }
+            if (flag.allowed_values) |allowed_values| {
+                var value_ok = false;
+                for (allowed_values) |candidate| {
+                    if (std.mem.eql(u8, candidate, value)) {
+                        value_ok = true;
+                        break;
+                    }
+                }
+                if (!value_ok) return ParseError.InvalidAllowedValue;
+            }
+
+            if (ctx.flags.getPtr(flag.name)) |existing| {
+                switch (existing.*) {
+                    .key_value_list => |*list| try list.append(allocator, .{ .key = key, .value = value }),
+                    else => {
+                        var list = try std.ArrayList(Command.KeyValuePair).initCapacity(allocator, 0);
+                        try list.append(allocator, .{ .key = key, .value = value });
+                        existing.* = .{ .key_value_list = list };
+                    },
+                }
+                return;
+            }
+
+            var list = try std.ArrayList(Command.KeyValuePair).initCapacity(allocator, 0);
+            try list.append(allocator, .{ .key = key, .value = value });
+            try ctx.flags.put(flag.name, .{ .key_value_list = list });
         },
     }
 }
@@ -286,7 +350,7 @@ fn applyDefaults(ctx: *ParseContext, command: *Command) !void {
     defer chain.deinit(ctx.allocator);
 
     for (chain.items) |cmd| {
-        for (cmd.flags.items) |flag| {
+        for (cmd.flags.constSlice()) |flag| {
             if (cmd != command and !flag.persistent) continue;
             if (ctx.flags.contains(flag.name)) continue;
             if (flag.default_value) |default_value| {
@@ -295,6 +359,7 @@ fn applyDefaults(ctx: *ParseContext, command: *Command) !void {
                     .string => |v| try ctx.flags.put(flag.name, .{ .string = v }),
                     .int => |v| try ctx.flags.put(flag.name, .{ .int = v }),
                     .float => |v| try ctx.flags.put(flag.name, .{ .float = v }),
+                    .enum_tag => |v| try ctx.flags.put(flag.name, .{ .enum_tag = v }),
                     .string_list => |items| {
                         var list = try std.ArrayList([]const u8).initCapacity(ctx.allocator, 0);
                         for (items) |item| try list.append(ctx.allocator, item);
@@ -336,7 +401,7 @@ fn validateRequiredFlags(ctx: *ParseContext) !void {
     defer chain.deinit(ctx.allocator);
 
     for (chain.items) |cmd| {
-        for (cmd.flags.items) |flag| {
+        for (cmd.flags.constSlice()) |flag| {
             if (cmd != ctx.command and !flag.persistent) continue;
             if (flag.required and !ctx.flags.contains(flag.name)) {
                 return ParseError.MissingRequiredFlag;
@@ -373,6 +438,11 @@ pub fn diagnoseError(
         error.InvalidInt => makeDiagnostic(allocator, "expected int value for flag", null),
         error.InvalidFloat => makeDiagnostic(allocator, "expected float value for flag", null),
         error.InvalidEnumValue => makeDiagnostic(allocator, "invalid value; expected one of allowed values", null),
+        error.KeyValueMissingEquals => makeDiagnostic(allocator, "expected key=value for flag", null),
+        error.KeyValueEmptyKey => makeDiagnostic(allocator, "key=value flag key cannot be empty", null),
+        error.KeyValueEmptyValue => makeDiagnostic(allocator, "key=value flag value cannot be empty", null),
+        error.InvalidAllowedKey => makeDiagnostic(allocator, "invalid key; expected one of allowed keys", null),
+        error.InvalidAllowedValue => makeDiagnostic(allocator, "invalid value; expected one of allowed values", null),
         error.UnexpectedValueForBool => makeDiagnostic(allocator, "boolean flag does not accept a value", null),
         error.MutuallyExclusiveFlags => makeDiagnostic(allocator, "mutually exclusive flags were provided together", null),
     };
@@ -458,7 +528,7 @@ fn collectVisibleFlagNames(allocator: std.mem.Allocator, command: *Command, out:
     var chain = try command.collectAncestorPath(allocator);
     defer chain.deinit(allocator);
     for (chain.items) |cmd| {
-        for (cmd.flags.items) |flag| {
+        for (cmd.flags.constSlice()) |flag| {
             if (cmd != command and !flag.persistent) continue;
             try out.append(allocator, flag.name);
         }

@@ -9,4 +9,9 @@ pub const FangzError = std.mem.Allocator.Error || Parser.ParseError || error{
     DuplicateAlias,
     MultipleVariadicPositionals,
     VariadicMustBeLast,
+    InvalidFlagConfiguration,
+    /// Returned when a command already has MAX_INLINE_FLAGS registered flags.
+    TooManyFlags,
+    /// Returned when a mutation (addFlag, addSubcommand, …) is attempted after freeze().
+    FrozenCommand,
 };

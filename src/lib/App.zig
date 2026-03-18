@@ -59,6 +59,7 @@ pub fn setCompletionsEnabled(self: *App, enabled: bool) void {
 /// Parses explicit argv tokens and returns the active parse context.
 pub fn parseFrom(self: *App, argv: []const []const u8) FangzError!*ParseContext {
     try self.ensureCompletionCommand();
+    try self.root_command.freeze();
     if (self.last_context) |*ctx| ctx.deinit();
     self.last_context = null;
 
@@ -81,6 +82,7 @@ pub fn parseProcess(self: *App) FangzError!*ParseContext {
 /// Parses and executes command hooks for explicit argv input.
 pub fn executeFrom(self: *App, argv: []const []const u8) anyerror!void {
     try self.ensureCompletionCommand();
+    try self.root_command.freeze();
 
     if (self.completions_enabled and argv.len > 0 and std.mem.eql(u8, argv[0], "__complete")) {
         try Completion.printDynamicSuggestions(self.root(), argv[1..]);
@@ -103,6 +105,11 @@ pub fn executeFrom(self: *App, argv: []const []const u8) anyerror!void {
             error.InvalidInt => error.InvalidInt,
             error.InvalidFloat => error.InvalidFloat,
             error.InvalidEnumValue => error.InvalidEnumValue,
+            error.KeyValueMissingEquals => error.KeyValueMissingEquals,
+            error.KeyValueEmptyKey => error.KeyValueEmptyKey,
+            error.KeyValueEmptyValue => error.KeyValueEmptyValue,
+            error.InvalidAllowedKey => error.InvalidAllowedKey,
+            error.InvalidAllowedValue => error.InvalidAllowedValue,
             error.UnexpectedValueForBool => error.UnexpectedValueForBool,
             error.MutuallyExclusiveFlags => error.MutuallyExclusiveFlags,
             else => null,
@@ -139,6 +146,14 @@ pub fn executeProcess(self: *App) anyerror!void {
 /// Generates markdown docs for the current command tree.
 pub fn generateMarkdownDocs(self: *App, options: DocGenerator.Options) !void {
     try DocGenerator.generateMarkdownDocs(self.allocator, self.root(), options);
+}
+
+/// Generates a shell completion script to the provided writer.
+///
+/// Use the `Shell` enum for type-safe shell selection.  The script delegates
+/// to the `__complete` runtime endpoint for dynamic suggestions.
+pub fn generateCompletions(self: *App, shell: Completion.Shell, writer: anytype) !void {
+    try Completion.generateCompletions(&self.root_command, shell, writer);
 }
 
 /// Renders help text for the given command to stdout.

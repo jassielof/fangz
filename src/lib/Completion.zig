@@ -2,10 +2,34 @@
 //!
 //! This module provides static script emitters for multiple shells and a shared
 //! `__complete` runtime suggestion path used by dynamic completion integrations.
+//!
+//! ## Typed API
+//!
+//! Use `generateCompletions(root, shell, writer)` with the `Shell` enum for
+//! type-safe script generation.  The shell-string-based `printCompletionScript`
+//! is kept for the built-in `completion <shell>` subcommand.
+//!
+//! ## Dynamic suggestions
+//!
+//! When a flag is being completed with `--name=<prefix>`, suggestions include:
+//! - For `enum_tag` and `string` flags with `allowed_values`: the allowed values.
+//! - For `key_value_list` flags: `--name=<key>=` candidates from `allowed_keys`.
+//! - For `key_value_list` flags after `--name=<key>=`: `--name=<key>=<value>`
+//!   candidates from `allowed_values`.
 
 const std = @import("std");
 const Command = @import("Command.zig");
 const ParseContext = @import("ParseContext.zig");
+
+/// Supported shell targets for completion script generation.
+pub const Shell = enum {
+    bash,
+    zsh,
+    fish,
+    powershell,
+    sh,
+    nu,
+};
 
 /// Registers the built-in `completion` subcommand on root.
 pub fn registerCompletionCommand(root: *Command) !void {
@@ -20,11 +44,10 @@ pub fn registerCompletionCommand(root: *Command) !void {
         .description = "One of: bash, zsh, fish, pwsh, sh, nu, nushell",
         .required = true,
     });
-    try completion.addFlag(.{
+    try completion.addFlag(bool, .{
         .name = "dynamic",
         .description = "For Nushell, emit dynamic completer module (default: static)",
-        .value_type = .bool,
-        .default_value = .{ .bool = false },
+        .default = false,
     });
     completion.setHelpOnEmptyArgs(true);
     completion.setHooks(.{ .run = runCompletionCommand });
@@ -37,7 +60,8 @@ pub fn runCompletionCommand(ctx: *ParseContext) !void {
     try printCompletionScript(ctx.command.root(), shell, dynamic);
 }
 
-/// Writes completion script for requested shell.
+/// Writes completion script for requested shell (string-based, used by the
+/// built-in `completion` subcommand).
 pub fn printCompletionScript(root: *Command, shell: []const u8, dynamic: bool) !void {
     var buf: [8192]u8 = undefined;
     var out = std.fs.File.stdout().writer(&buf);
@@ -62,6 +86,21 @@ pub fn printCompletionScript(root: *Command, shell: []const u8, dynamic: bool) !
         return error.InvalidEnumValue;
     }
     try out.interface.flush();
+}
+
+/// Generates a completion script for the given shell to `writer`.
+///
+/// This is the typed API intended for programmatic use.  The `writer` may be
+/// any `anytype` writer (file, buffer, etc.).
+pub fn generateCompletions(root: *Command, shell: Shell, writer: anytype) !void {
+    switch (shell) {
+        .bash => try renderBash(writer, root.name),
+        .zsh => try renderZsh(writer, root.name),
+        .fish => try renderFish(writer, root.name),
+        .powershell => try renderPwsh(writer, root.name),
+        .sh => try renderSh(writer, root.name),
+        .nu => try renderNuStatic(writer, root, root.name, true),
+    }
 }
 
 /// Prints dynamic completion suggestions for `__complete`.
@@ -104,16 +143,37 @@ fn suggestCommands(writer: anytype, cmd: *const Command, prefix: []const u8) !vo
     }
 }
 
-/// Suggests short/long flags matching `prefix`.
+/// Suggests short/long flags or flag values matching `prefix`.
+///
+/// When the prefix contains `=` (e.g. `--format=` or `--rule=name=`), the
+/// function switches to value-completion mode: it looks up the flag and
+/// emits candidates from `allowed_values` / `allowed_keys`.
 fn suggestFlags(writer: anytype, cmd: *const Command, prefix: []const u8) !void {
+    // Value-completion mode: prefix is "--flag-name=<value-prefix>"
+    if (std.mem.startsWith(u8, prefix, "--")) {
+        const body = prefix[2..];
+        if (std.mem.indexOfScalar(u8, body, '=')) |eq_idx| {
+            const flag_name = body[0..eq_idx];
+            const value_prefix = body[eq_idx + 1 ..];
+            const name_prefix = prefix[0 .. 2 + eq_idx + 1]; // "--flag-name="
+            if (cmd.resolveFlagByName(flag_name)) |lookup| {
+                const flag = lookup.command.flags.constSlice()[lookup.index];
+                try suggestFlagValues(writer, name_prefix, flag, value_prefix);
+                return;
+            }
+        }
+    }
+
+    // Flag-name completion mode
     var chain = try cmd.collectAncestorPath(std.heap.page_allocator);
     defer chain.deinit(std.heap.page_allocator);
 
     for (chain.items) |ancestor| {
-        for (ancestor.flags.items) |flag| {
+        for (ancestor.flags.constSlice()) |flag| {
             if (ancestor != cmd and !flag.persistent) continue;
-            const long = try std.fmt.allocPrint(std.heap.page_allocator, "--{s}", .{flag.name});
-            defer std.heap.page_allocator.free(long);
+
+            var long_buf: [256]u8 = undefined;
+            const long = std.fmt.bufPrint(&long_buf, "--{s}", .{flag.name}) catch continue;
             if (std.mem.startsWith(u8, long, prefix)) try writer.print("{s}\n", .{long});
 
             if (flag.short) |s| {
@@ -132,20 +192,68 @@ fn suggestFlags(writer: anytype, cmd: *const Command, prefix: []const u8) !void 
     }
 }
 
+/// Suggests values for a specific flag given an already-typed value prefix.
+///
+/// - `enum_tag` / `string` with `allowed_values`: emits `name_prefix<value>`.
+/// - `key_value_list` without `=` in value_prefix: emits `name_prefix<key>=`
+///   candidates from `allowed_keys`.
+/// - `key_value_list` with `=` in value_prefix: emits `name_prefix<key>=<val>`
+///   candidates from `allowed_values`.
+fn suggestFlagValues(
+    writer: anytype,
+    name_prefix: []const u8,
+    flag: Command.Flag,
+    value_prefix: []const u8,
+) !void {
+    if (flag.value_type == .key_value_list) {
+        if (std.mem.indexOfScalar(u8, value_prefix, '=')) |kv_eq| {
+            // Completing the value portion: --rule=missing_doc_comment=<value>
+            const key = value_prefix[0..kv_eq];
+            const val_prefix = value_prefix[kv_eq + 1 ..];
+            if (flag.allowed_values) |vals| {
+                for (vals) |v| {
+                    if (val_prefix.len == 0 or std.mem.startsWith(u8, v, val_prefix)) {
+                        try writer.print("{s}{s}={s}\n", .{ name_prefix, key, v });
+                    }
+                }
+            }
+        } else {
+            // Completing the key portion: --rule=<key>=
+            if (flag.allowed_keys) |keys| {
+                for (keys) |k| {
+                    if (value_prefix.len == 0 or std.mem.startsWith(u8, k, value_prefix)) {
+                        try writer.print("{s}{s}=\n", .{ name_prefix, k });
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // enum_tag or string with allowed_values
+    if (flag.allowed_values) |vals| {
+        for (vals) |v| {
+            if (value_prefix.len == 0 or std.mem.startsWith(u8, v, value_prefix)) {
+                try writer.print("{s}{s}\n", .{ name_prefix, v });
+            }
+        }
+    }
+}
+
 /// Checks whether a token references a flag that consumes a value.
 fn flagExpectsValue(cmd: *const Command, token: []const u8) bool {
     if (std.mem.startsWith(u8, token, "--")) {
         var name = token[2..];
         if (std.mem.indexOfScalar(u8, name, '=')) |eq| name = name[0..eq];
         if (cmd.resolveFlagByName(name)) |lookup| {
-            return lookup.command.flags.items[lookup.index].takesValue();
+            return lookup.command.flags.constSlice()[lookup.index].takesValue();
         }
         return false;
     }
     if (std.mem.startsWith(u8, token, "-") and token.len == 2) {
         const short = token[1];
         if (cmd.resolveFlagByShort(short)) |lookup| {
-            return lookup.command.flags.items[lookup.index].takesValue();
+            return lookup.command.flags.constSlice()[lookup.index].takesValue();
         }
     }
     return false;
@@ -305,7 +413,7 @@ fn renderNuStatic(w: anytype, root: *const Command, path: []const u8, is_root: b
         try w.print("  export extern \"{s}\" [\n", .{path});
     }
 
-    for (root.flags.items) |flag| {
+    for (root.flags.constSlice()) |flag| {
         try printNuFlag(w, flag);
     }
     try w.print("    --help(-h)              # Print help\n", .{});

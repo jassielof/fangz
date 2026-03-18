@@ -63,9 +63,9 @@ test "short flag bundling parses char by char" {
     defer app.deinit();
 
     const root = app.root();
-    try root.addFlag(.{ .name = "l", .short = 'l', .value_type = .bool });
-    try root.addFlag(.{ .name = "a", .short = 'a', .value_type = .bool });
-    try root.addFlag(.{ .name = "header", .short = 'H', .value_type = .string });
+    try root.addFlag(bool, .{ .name = "l", .short = 'l' });
+    try root.addFlag(bool, .{ .name = "a", .short = 'a' });
+    try root.addFlag([]const u8, .{ .name = "header", .short = 'H' });
 
     const ctx = try app.parseFrom(&.{ "-laH", "token" });
     try testing.expect(ctx.boolFlag("l").?);
@@ -78,13 +78,12 @@ test "typed flags include defaults and required validation" {
     defer app.deinit();
 
     const root = app.root();
-    try root.addFlag(.{ .name = "count", .short = 'c', .value_type = .int, .required = true });
-    try root.addFlag(.{ .name = "ratio", .value_type = .float, .default_value = .{ .float = 2.5 } });
-    try root.addFlag(.{
+    try root.addFlag(i64, .{ .name = "count", .short = 'c', .required = true });
+    try root.addFlag(f64, .{ .name = "ratio", .default = 2.5 });
+    try root.addFlag([]const u8, .{
         .name = "format",
-        .value_type = .string,
         .allowed_values = &.{ "json", "table" },
-        .default_value = .{ .string = "json" },
+        .default = "json",
     });
 
     try testing.expectError(error.MissingRequiredFlag, app.parseFrom(&.{}));
@@ -101,11 +100,11 @@ test "enum flag convenience parses default and explicit values" {
     var app = try makeApp();
     defer app.deinit();
 
-    try app.root().addEnumFlag(Output, .{
+    try app.root().addFlag(Output, .{
         .name = "output",
         .short = 'o',
         .description = "Output format",
-        .default_value = .json,
+        .default = .json,
     });
 
     const ctx_default = try app.parseFrom(&.{});
@@ -121,7 +120,7 @@ test "enum flag rejects invalid value" {
     var app = try makeApp();
     defer app.deinit();
 
-    try app.root().addEnumFlag(Output, .{ .name = "output" });
+    try app.root().addFlag(Output, .{ .name = "output" });
     try testing.expectError(error.InvalidEnumValue, app.parseFrom(&.{ "--output", "yaml" }));
 }
 
@@ -138,7 +137,7 @@ test "repeatable string list flag accumulates values" {
     var app = try makeApp();
     defer app.deinit();
 
-    try app.root().addFlag(.{ .name = "header", .short = 'H', .value_type = .string_list });
+    try app.root().addFlag([]const []const u8, .{ .name = "header", .short = 'H' });
     const ctx = try app.parseFrom(&.{ "--header", "A:B", "-H", "C:D" });
     const values = ctx.stringListFlag("header").?;
     try testing.expectEqual(@as(usize, 2), values.len);
@@ -150,10 +149,9 @@ test "global persistent flag propagates to subcommands" {
     var app = try makeApp();
     defer app.deinit();
 
-    try app.root().addFlag(.{
+    try app.root().addFlag(bool, .{
         .name = "verbose",
         .short = 'v',
-        .value_type = .bool,
         .persistent = true,
     });
     _ = try app.root().addSubcommand(.{ .name = "status", .description = "status" });
@@ -178,8 +176,8 @@ test "mutually exclusive flags fail when both are present" {
     var app = try makeApp();
     defer app.deinit();
 
-    try app.root().addFlag(.{ .name = "json", .value_type = .bool });
-    try app.root().addFlag(.{ .name = "yaml", .value_type = .bool });
+    try app.root().addFlag(bool, .{ .name = "json" });
+    try app.root().addFlag(bool, .{ .name = "yaml" });
     try app.root().addMutuallyExclusive(.{ .names = &.{ "json", "yaml" } });
 
     try testing.expectError(error.MutuallyExclusiveFlags, app.parseFrom(&.{ "--json", "--yaml" }));
@@ -197,7 +195,7 @@ test "options requiring value accept dash-prefixed values" {
     var app = try makeApp();
     defer app.deinit();
 
-    try app.root().addFlag(.{ .name = "count", .value_type = .int });
+    try app.root().addFlag(i64, .{ .name = "count" });
     const ctx = try app.parseFrom(&.{ "--count", "-1" });
     try testing.expectEqual(@as(i64, -1), ctx.intFlag("count").?);
 }
@@ -206,8 +204,8 @@ test "bundle with attached value on bool flags errors" {
     var app = try makeApp();
     defer app.deinit();
 
-    try app.root().addFlag(.{ .name = "a", .short = 'a', .value_type = .bool });
-    try app.root().addFlag(.{ .name = "b", .short = 'b', .value_type = .bool });
+    try app.root().addFlag(bool, .{ .name = "a", .short = 'a' });
+    try app.root().addFlag(bool, .{ .name = "b", .short = 'b' });
     try testing.expectError(error.UnexpectedValueForBool, app.parseFrom(&.{"-ab=foo"}));
 }
 
@@ -216,10 +214,9 @@ test "doc generator writes single markdown file by default" {
     defer app.deinit();
 
     const root = app.root();
-    try root.addFlag(.{
+    try root.addFlag(bool, .{
         .name = "verbose",
         .short = 'v',
-        .value_type = .bool,
         .persistent = true,
         .description = "Verbose output",
     });
@@ -227,10 +224,9 @@ test "doc generator writes single markdown file by default" {
         .name = "commit",
         .description = "Record changes",
     });
-    try commit.addFlag(.{
+    try commit.addFlag([]const u8, .{
         .name = "message",
         .short = 'm',
-        .value_type = .string,
         .required = true,
         .description = "Commit message",
     });

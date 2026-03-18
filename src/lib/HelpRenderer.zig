@@ -40,7 +40,7 @@ fn renderUsage(writer: anytype, command: *const Command, profile: ColorProfile) 
     try writer.print("\n", .{});
     try carnaval.Style.init().bolded().renderWithProfile("Usage:", writer, profile);
     try writer.print(" {s}", .{command.name});
-    if (hasAnyOptions(command)) {
+    if (command.hasAnyOptions()) {
         try writer.print(" [OPTIONS]", .{});
     }
     if (command.subcommands.items.len > 0) {
@@ -58,18 +58,6 @@ fn renderUsage(writer: anytype, command: *const Command, profile: ColorProfile) 
     try writer.print("\n", .{});
 }
 
-/// Determines whether any options should appear in usage/help.
-fn hasAnyOptions(command: *const Command) bool {
-    if (command.flags.items.len > 0) return true;
-    if (command.rootConst().version != null) return true;
-    var current = command.parent;
-    while (current) |parent| : (current = parent.parent) {
-        for (parent.flags.items) |flag| {
-            if (flag.persistent) return true;
-        }
-    }
-    return true; // help is always available
-}
 
 /// Renders positional arguments table-like list.
 fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize) !void {
@@ -161,7 +149,7 @@ fn renderSubcommands(writer: anytype, command: *const Command, profile: ColorPro
 /// Renders command options including inherited persistent flags.
 fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize) !void {
     var spec_width: usize = 0;
-    for (command.flags.items) |flag| {
+    for (command.flags.constSlice()) |flag| {
         const len = optionSpecLen(flag);
         if (len > spec_width) spec_width = len;
     }
@@ -170,7 +158,7 @@ fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, 
         var chain = try parent.collectAncestorPath(command.allocator);
         defer chain.deinit(command.allocator);
         for (chain.items) |ancestor| {
-            for (ancestor.flags.items) |flag| {
+            for (ancestor.flags.constSlice()) |flag| {
                 if (!flag.persistent) continue;
                 const len = optionSpecLen(flag);
                 if (len > spec_width) spec_width = len;
@@ -183,7 +171,7 @@ fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, 
         spec_width = "-V, --version".len;
     }
 
-    for (command.flags.items) |flag| {
+    for (command.flags.constSlice()) |flag| {
         try renderOneFlag(writer, flag, false, profile, spec_width, terminal_width, command.allocator);
     }
 
@@ -191,7 +179,7 @@ fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, 
         var chain = try parent.collectAncestorPath(command.allocator);
         defer chain.deinit(command.allocator);
         for (chain.items) |ancestor| {
-            for (ancestor.flags.items) |flag| {
+            for (ancestor.flags.constSlice()) |flag| {
                 if (!flag.persistent) continue;
                 try renderOneFlag(writer, flag, true, profile, spec_width, terminal_width, command.allocator);
             }
@@ -234,7 +222,7 @@ fn renderOneFlag(
     std.mem.copyForwards(u8, spec_buf[spec_len .. spec_len + flag.name.len], flag.name);
     spec_len += flag.name.len;
 
-    const ty = typeName(flag.value_type);
+    const ty = if (flag.value_hint) |hint| hint else typeName(flag.value_type);
     if (ty.len > 0) {
         spec_buf[spec_len] = ' ';
         spec_len += 1;
@@ -244,7 +232,7 @@ fn renderOneFlag(
         spec_len += ty.len;
         spec_buf[spec_len] = '>';
         spec_len += 1;
-        if (flag.value_type == .string_list) {
+        if (flag.value_type == .string_list or flag.value_type == .key_value_list) {
             spec_buf[spec_len] = '.';
             spec_len += 1;
             spec_buf[spec_len] = '.';
@@ -265,6 +253,7 @@ fn renderOneFlag(
             .string => |v| try d.print(" [default: {s}]", .{v}),
             .int => |v| try d.print(" [default: {}]", .{v}),
             .float => |v| try d.print(" [default: {d}]", .{v}),
+            .enum_tag => |ordinal| try d.print(" [default: {s}]", .{enumTagName(flag, ordinal)}),
             .string_list => |_| try d.print(" [default: set]", .{}),
         }
     }
@@ -286,10 +275,10 @@ fn optionSpecLen(flag: Command.Flag) usize {
     var len = flag.name.len + 2;
     if (flag.short != null) len += 4;
 
-    const ty = typeName(flag.value_type);
+    const ty = if (flag.value_hint) |hint| hint else typeName(flag.value_type);
     if (ty.len > 0) {
         len += ty.len + 3;
-        if (flag.value_type == .string_list) len += 3;
+        if (flag.value_type == .string_list or flag.value_type == .key_value_list) len += 3;
     }
 
     return len;
@@ -379,6 +368,17 @@ fn printSpaces(writer: anytype, count: usize) !void {
     }
 }
 
+/// Resolves the string name of an enum_tag ordinal from the flag descriptor.
+/// Falls back to `"set"` if the ordinal cannot be matched.
+fn enumTagName(flag: Command.Flag, ordinal: u32) []const u8 {
+    const names = flag.allowed_values orelse return "set";
+    const ords = flag.enum_values orelse return "set";
+    for (ords, 0..) |ord, i| {
+        if (ord == ordinal and i < names.len) return names[i];
+    }
+    return "set";
+}
+
 /// Returns display token for a flag type.
 fn typeName(flag_type: Command.FlagType) []const u8 {
     return switch (flag_type) {
@@ -387,5 +387,7 @@ fn typeName(flag_type: Command.FlagType) []const u8 {
         .int => "INT",
         .float => "FLOAT",
         .string_list => "STRING",
+        .key_value_list => "KEY=VALUE",
+        .enum_tag => "VALUE",
     };
 }
