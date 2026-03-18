@@ -8,6 +8,7 @@ const App = @This();
 
 const std = @import("std");
 const carnaval = @import("carnaval");
+const meta = @import("fangz_meta");
 const Command = @import("Command.zig");
 const FangzError = @import("error.zig").FangzError;
 const Completion = @import("Completion.zig");
@@ -23,19 +24,33 @@ completions_enabled: bool = true,
 completion_registered: bool = false,
 
 pub const Init = struct {
-    name: []const u8,
+    /// Binary name. Defaults to the executable name injected by `injectMeta`
+    /// in the consumer's `build.zig`. Override to use a custom display name.
+    name: ?[]const u8 = null,
     description: []const u8 = "",
+    /// Semver string. Defaults to the version from the consumer's
+    /// `build.zig.zon` injected by `injectMeta`. Pass an explicit value to
+    /// override, or pass `""` to suppress the `--version` flag entirely.
     version: ?[]const u8 = null,
 };
 
 /// Constructs an application with a root command.
 pub fn init(allocator: std.mem.Allocator, cfg: Init) FangzError!App {
+    // Fall back to build-injected meta when fields are absent.
+    const name = cfg.name orelse meta.name;
+    const version: ?[]const u8 = if (cfg.version) |v|
+        (if (v.len > 0) v else null)
+    else if (meta.version.len > 0)
+        meta.version
+    else
+        null;
+
     return .{
         .allocator = allocator,
         .root_command = try Command.init(allocator, .{
-            .name = cfg.name,
+            .name = name,
             .description = cfg.description,
-            .version = cfg.version,
+            .version = version,
         }),
     };
 }
