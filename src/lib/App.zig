@@ -22,6 +22,8 @@ root_command: Command,
 last_context: ?ParseContext = null,
 completions_enabled: bool = true,
 completion_registered: bool = false,
+commit: []const u8 = "",
+branch: []const u8 = "",
 
 pub const Init = struct {
     /// Binary name. Defaults to the executable name injected by `injectMeta`
@@ -32,6 +34,12 @@ pub const Init = struct {
     /// `build.zig.zon` injected by `injectMeta`. Pass an explicit value to
     /// override, or pass `""` to suppress the `--version` flag entirely.
     version: ?[]const u8 = null,
+    /// Short git commit hash. Defaults to the injected value from `injectMeta`.
+    /// Pass `""` to suppress from `--version` output.
+    commit: ?[]const u8 = null,
+    /// Git branch name. Defaults to the injected value from `injectMeta`.
+    /// Pass `""` to suppress from `--version` output.
+    branch: ?[]const u8 = null,
 };
 
 /// Constructs an application with a root command.
@@ -44,9 +52,13 @@ pub fn init(allocator: std.mem.Allocator, cfg: Init) FangzError!App {
         meta.version
     else
         null;
+    const commit = cfg.commit orelse meta.commit;
+    const branch = cfg.branch orelse meta.branch;
 
     return .{
         .allocator = allocator,
+        .commit = commit,
+        .branch = branch,
         .root_command = try Command.init(allocator, .{
             .name = name,
             .description = cfg.description,
@@ -216,11 +228,47 @@ fn runHooks(self: *App, ctx: *ParseContext) !void {
 }
 
 /// Prints root command version to stdout.
+///
+/// Output format:
+/// - `0.1.0 (main@abc1234)` — version + branch + commit
+/// - `0.1.0 (abc1234)`      — version + commit only
+/// - `0.1.0 (main)`         — version + branch only
+/// - `0.1.0`                — version only
+/// - `main@abc1234`         — git info only (no version set)
+/// - nothing                — no version and no git info
 fn printVersion(self: *App) !void {
-    const version = self.root().version orelse return;
-    var stdout_buffer: [256]u8 = undefined;
+    const version = self.root().version;
+    const has_commit = self.commit.len > 0;
+    const has_branch = self.branch.len > 0;
+    const has_git = has_commit or has_branch;
+
+    if (version == null and !has_git) return;
+
+    var stdout_buffer: [512]u8 = undefined;
     var out_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    try out_writer.interface.print("{s}\n", .{version});
+
+    if (version) |v| {
+        if (has_git) {
+            if (has_branch and has_commit) {
+                try out_writer.interface.print("{s} ({s}@{s})\n", .{ v, self.branch, self.commit });
+            } else if (has_branch) {
+                try out_writer.interface.print("{s} ({s})\n", .{ v, self.branch });
+            } else {
+                try out_writer.interface.print("{s} ({s})\n", .{ v, self.commit });
+            }
+        } else {
+            try out_writer.interface.print("{s}\n", .{v});
+        }
+    } else {
+        if (has_branch and has_commit) {
+            try out_writer.interface.print("{s}@{s}\n", .{ self.branch, self.commit });
+        } else if (has_branch) {
+            try out_writer.interface.print("{s}\n", .{self.branch});
+        } else {
+            try out_writer.interface.print("{s}\n", .{self.commit});
+        }
+    }
+
     try out_writer.interface.flush();
 }
 

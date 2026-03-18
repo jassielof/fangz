@@ -23,10 +23,12 @@ pub fn build(b: *std.Build) void {
 
     // Provide default fangz_meta so the library compiles standalone (e.g. for
     // fangz's own test suite). Consumers who call injectMeta() will overwrite
-    // this with their own name + version.
+    // this with their own values.
     const default_meta = b.addOptions();
     default_meta.addOption([]const u8, "name", mod_name);
     default_meta.addOption([]const u8, "version", extractVersion(b) orelse "");
+    default_meta.addOption([]const u8, "commit", "");
+    default_meta.addOption([]const u8, "branch", "");
     libary_module.addOptions("fangz_meta", default_meta);
 
     const documentation_library = b.addLibrary(.{
@@ -60,9 +62,9 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_tests.step);
 }
 
-/// Injects the consumer's binary name and manifest version into the fangz
-/// library module as a `fangz_meta` options module, making them available as
-/// defaults inside `App.init`.
+/// Injects the consumer's binary name, manifest version, and current git
+/// commit/branch into the fangz library module as a `fangz_meta` options
+/// module, making them available as defaults inside `App.init`.
 ///
 /// Call this from your `build.zig` after resolving the fangz dependency:
 ///
@@ -74,11 +76,15 @@ pub fn build(b: *std.Build) void {
 /// fangz_build.injectMeta(b, exe, fangz_mod);
 /// ```
 ///
-/// - `name`    is taken from `compile.name` (the executable name).
-/// - `version` is extracted from the consumer's `build.zig.zon`.
+/// Injected fields:
+/// - `name`    — `compile.name` (the executable name)
+/// - `version` — extracted from the consumer's `build.zig.zon`
+/// - `commit`  — short git commit hash (`git rev-parse --short HEAD`)
+/// - `branch`  — current git branch (`git rev-parse --abbrev-ref HEAD`)
 ///
-/// After injection, `App.init` will use these as fallback values when `.name`
-/// or `.version` are omitted from `App.Init`.
+/// Git fields fall back to `""` when git is unavailable or the directory is
+/// not a repository. After injection, `App.init` uses these as fallback
+/// values when `.name`, `.version`, `.commit`, or `.branch` are omitted.
 pub fn injectMeta(
     b: *std.Build,
     compile: *std.Build.Step.Compile,
@@ -87,6 +93,8 @@ pub fn injectMeta(
     const options = b.addOptions();
     options.addOption([]const u8, "name", compile.name);
     options.addOption([]const u8, "version", extractVersion(b) orelse "");
+    options.addOption([]const u8, "commit", extractGitCommit(b));
+    options.addOption([]const u8, "branch", extractGitBranch(b));
     // Overwrite the default fangz_meta that fangz's own build() set up.
     fangz_mod.addOptions("fangz_meta", options);
 }
@@ -102,4 +110,24 @@ fn extractVersion(b: *std.Build) ?[]const u8 {
     const after = content[start + marker.len ..];
     const end = std.mem.indexOfScalar(u8, after, '"') orelse return null;
     return b.dupe(after[0..end]);
+}
+
+fn extractGitCommit(b: *std.Build) []const u8 {
+    const result = std.process.Child.run(.{
+        .allocator = b.allocator,
+        .argv = &.{ "git", "rev-parse", "--short", "HEAD" },
+        .cwd = b.pathFromRoot("."),
+    }) catch return "";
+    const trimmed = std.mem.trim(u8, result.stdout, " \n\r\t");
+    return if (trimmed.len > 0) b.dupe(trimmed) else "";
+}
+
+fn extractGitBranch(b: *std.Build) []const u8 {
+    const result = std.process.Child.run(.{
+        .allocator = b.allocator,
+        .argv = &.{ "git", "rev-parse", "--abbrev-ref", "HEAD" },
+        .cwd = b.pathFromRoot("."),
+    }) catch return "";
+    const trimmed = std.mem.trim(u8, result.stdout, " \n\r\t");
+    return if (trimmed.len > 0) b.dupe(trimmed) else "";
 }
