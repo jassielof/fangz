@@ -2,6 +2,8 @@
 
 A CLI library for Zig.
 
+TODO: idk why the version flag is being shown in every subcommand, it should only be shown in the root command.
+
 ## Credits
 
 - [Cobra](https://cobra.dev/)
