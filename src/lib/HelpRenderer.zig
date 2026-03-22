@@ -58,7 +58,6 @@ fn renderUsage(writer: anytype, command: *const Command, profile: ColorProfile) 
     try writer.print("\n", .{});
 }
 
-
 /// Renders positional arguments table-like list.
 fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize) !void {
     var spec_width: usize = 0;
@@ -167,7 +166,7 @@ fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, 
     }
 
     if ("-h, --help".len > spec_width) spec_width = "-h, --help".len;
-    if (command.rootConst().version != null and "-V, --version".len > spec_width) {
+    if (command.parent == null and command.rootConst().version != null and "-V, --version".len > spec_width) {
         spec_width = "-V, --version".len;
     }
 
@@ -187,7 +186,7 @@ fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, 
     }
 
     try printAlignedOptionRow(writer, profile, "-h, --help", "Print help", spec_width, terminal_width, command.allocator);
-    if (command.rootConst().version != null) {
+    if (command.parent == null and command.rootConst().version != null) {
         try printAlignedOptionRow(writer, profile, "-V, --version", "Print version", spec_width, terminal_width, command.allocator);
     }
 }

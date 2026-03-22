@@ -189,7 +189,7 @@ fn renderCommandMarkdown(
     try w.print("|---|---|---|---|---|---|\n", .{});
     try appendOptionsTable(allocator, cmd, w);
     try w.print("| `-h, --help` | `bool` | no | - | local | Print help |\n", .{});
-    if (cmd.rootConst().version != null) {
+    if (cmd.parent == null and cmd.rootConst().version != null) {
         try w.print("| `-V, --version` | `bool` | no | - | local | Print version |\n", .{});
     }
     try w.print("\n", .{});

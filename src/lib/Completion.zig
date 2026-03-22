@@ -186,7 +186,7 @@ fn suggestFlags(writer: anytype, cmd: *const Command, prefix: []const u8) !void 
 
     if (std.mem.startsWith(u8, "--help", prefix)) try writer.print("--help\n", .{});
     if (std.mem.startsWith(u8, "-h", prefix)) try writer.print("-h\n", .{});
-    if (cmd.rootConst().version != null) {
+    if (cmd.parent == null and cmd.rootConst().version != null) {
         if (std.mem.startsWith(u8, "--version", prefix)) try writer.print("--version\n", .{});
         if (std.mem.startsWith(u8, "-V", prefix)) try writer.print("-V\n", .{});
     }
@@ -417,7 +417,7 @@ fn renderNuStatic(w: anytype, root: *const Command, path: []const u8, is_root: b
         try printNuFlag(w, flag);
     }
     try w.print("    --help(-h)              # Print help\n", .{});
-    if (root.rootConst().version != null) {
+    if (root.parent == null and root.rootConst().version != null) {
         try w.print("    --version(-V)           # Print version\n", .{});
     }
 
