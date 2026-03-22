@@ -2,6 +2,11 @@
 
 A CLI library for Zig.
 
+## TODO
+
+- The install command doesn't accept shorthands
+- Install rebuild doens't work
+
 ## Credits
 
 - [Cobra](https://cobra.dev/)
