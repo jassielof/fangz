@@ -143,21 +143,23 @@ fn extractGitBranch(b: *std.Build) []const u8 {
         return b.dupe(trimmed);
     }
 
-    // Detached HEAD (e.g. zigit worktree add --detach): resolve via origin/HEAD.
-    const sym = std.process.Child.run(.{
+    // Detached HEAD: read refs/heads (shared with the bare repo via the worktree).
+    // In a bare clone zigit worktree, refs/heads/main is always present.
+    const refs = std.process.Child.run(.{
         .allocator = b.allocator,
-        .argv = &.{ "git", "symbolic-ref", "-q", "refs/remotes/origin/HEAD" },
+        .argv = &.{ "git", "for-each-ref", "--format=%(refname:short)", "refs/heads" },
         .cwd = b.pathFromRoot("."),
     }) catch return "";
     defer {
-        b.allocator.free(sym.stdout);
-        b.allocator.free(sym.stderr);
+        b.allocator.free(refs.stdout);
+        b.allocator.free(refs.stderr);
     }
-    if (sym.term != .Exited or sym.term.Exited != 0) return "";
-    const sym_trim = std.mem.trim(u8, sym.stdout, " \n\r\t");
-    const prefix = "refs/remotes/origin/";
-    if (std.mem.startsWith(u8, sym_trim, prefix)) {
-        return b.dupe(sym_trim[prefix.len..]);
+    if (refs.term != .Exited or refs.term.Exited != 0) return "";
+    const refs_trim = std.mem.trim(u8, refs.stdout, " \n\r\t");
+    if (refs_trim.len > 0) {
+        const newline = std.mem.indexOfScalar(u8, refs_trim, '\n') orelse refs_trim.len;
+        const first = std.mem.trim(u8, refs_trim[0..newline], " \r\t");
+        if (first.len > 0) return b.dupe(first);
     }
     return "";
 }
