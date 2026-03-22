@@ -118,6 +118,11 @@ fn extractGitCommit(b: *std.Build) []const u8 {
         .argv = &.{ "git", "rev-parse", "--short", "HEAD" },
         .cwd = b.pathFromRoot("."),
     }) catch return "";
+    defer {
+        b.allocator.free(result.stdout);
+        b.allocator.free(result.stderr);
+    }
+    if (result.term != .Exited or result.term.Exited != 0) return "";
     const trimmed = std.mem.trim(u8, result.stdout, " \n\r\t");
     return if (trimmed.len > 0) b.dupe(trimmed) else "";
 }
@@ -128,6 +133,31 @@ fn extractGitBranch(b: *std.Build) []const u8 {
         .argv = &.{ "git", "rev-parse", "--abbrev-ref", "HEAD" },
         .cwd = b.pathFromRoot("."),
     }) catch return "";
+    defer {
+        b.allocator.free(result.stdout);
+        b.allocator.free(result.stderr);
+    }
+    if (result.term != .Exited or result.term.Exited != 0) return "";
     const trimmed = std.mem.trim(u8, result.stdout, " \n\r\t");
-    return if (trimmed.len > 0) b.dupe(trimmed) else "";
+    if (trimmed.len > 0 and !std.mem.eql(u8, trimmed, "HEAD")) {
+        return b.dupe(trimmed);
+    }
+
+    // Detached HEAD (e.g. zigit worktree add --detach): resolve via origin/HEAD.
+    const sym = std.process.Child.run(.{
+        .allocator = b.allocator,
+        .argv = &.{ "git", "symbolic-ref", "-q", "refs/remotes/origin/HEAD" },
+        .cwd = b.pathFromRoot("."),
+    }) catch return "";
+    defer {
+        b.allocator.free(sym.stdout);
+        b.allocator.free(sym.stderr);
+    }
+    if (sym.term != .Exited or sym.term.Exited != 0) return "";
+    const sym_trim = std.mem.trim(u8, sym.stdout, " \n\r\t");
+    const prefix = "refs/remotes/origin/";
+    if (std.mem.startsWith(u8, sym_trim, prefix)) {
+        return b.dupe(sym_trim[prefix.len..]);
+    }
+    return "";
 }
