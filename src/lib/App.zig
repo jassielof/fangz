@@ -44,6 +44,11 @@ pub const Init = struct {
 
 /// Constructs an application with a root command.
 pub fn init(allocator: std.mem.Allocator, cfg: Init) FangzError!App {
+    if (@import("builtin").os.tag == .windows) {
+        const win = std.os.windows;
+        _ = win.kernel32.SetConsoleOutputCP(65001);
+    }
+
     // Fall back to build-injected meta when fields are absent.
     const name = cfg.name orelse meta.name;
     const version: ?[]const u8 = if (cfg.version) |v|
