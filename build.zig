@@ -62,9 +62,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_tests.step);
 }
 
-/// Injects the consumer's binary name, manifest version, and current git
-/// commit/branch into the fangz library module as a `fangz_meta` options
-/// module, making them available as defaults inside `App.init`.
+/// Injects the consumer's binary name, manifest version, and current git commit/branch into the fangz library module as a `fangz_meta` options module, making them available as defaults inside `App.init`.
 ///
 /// Call this from your `build.zig` after resolving the fangz dependency:
 ///
@@ -77,14 +75,12 @@ pub fn build(b: *std.Build) void {
 /// ```
 ///
 /// Injected fields:
-/// - `name`    — `compile.name` (the executable name)
-/// - `version` — extracted from the consumer's `build.zig.zon`
-/// - `commit`  — short git commit hash (`git rev-parse --short HEAD`)
-/// - `branch`  — current git branch (`git rev-parse --abbrev-ref HEAD`)
+/// - `name`: `compile.name` (the executable name)
+/// - `version`: extracted from the consumer's `build.zig.zon`
+/// - `commit`: short git commit hash (`git rev-parse --short HEAD`)
+/// - `branch`: current git branch (`git rev-parse --abbrev-ref HEAD`)
 ///
-/// Git fields fall back to `""` when git is unavailable or the directory is
-/// not a repository. After injection, `App.init` uses these as fallback
-/// values when `.name`, `.version`, `.commit`, or `.branch` are omitted.
+/// Git fields fall back to `""` when git is unavailable or the directory is not a repository. After injection, `App.init` uses these as fallback values when `.name`, `.version`, `.commit`, or `.branch` are omitted.
 pub fn injectMeta(
     b: *std.Build,
     compile: *std.Build.Step.Compile,
