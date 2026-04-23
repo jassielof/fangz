@@ -5,31 +5,39 @@ pub fn build(b: *std.Build) void {
 
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const carnaval_dep = b.dependency("carnaval", .{
-        .target = target,
-        .optimize = optimize,
-    });
+
+    const carnaval_dep = b.dependency(
+        "carnaval",
+        .{
+            .target = target,
+            .optimize = optimize,
+        },
+    );
+
     const carnaval_mod = carnaval_dep.module("carnaval");
 
-    const libary_module = b.addModule(mod_name, .{
-        .root_source_file = b.path("src/lib/root.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{.{
-            .name = "carnaval",
-            .module = carnaval_mod,
-        }},
-    });
+    const libary_module = b.addModule(
+        mod_name,
+        .{
+            .root_source_file = b.path("src/lib/root.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{
+                .name = "carnaval",
+                .module = carnaval_mod,
+            }},
+        },
+    );
 
-    // Provide default fangz_meta so the library compiles standalone (e.g. for
-    // fangz's own test suite). Consumers who call injectMeta() will overwrite
-    // this with their own values.
+    // Provide default fangz_meta so the library compiles standalone (e.g. for fangz's own test suite). Consumers who call injectMeta() will overwrite this with their own values.
     const default_meta = b.addOptions();
     default_meta.addOption([]const u8, "name", mod_name);
     default_meta.addOption([]const u8, "version", extractVersion(b) orelse "");
     default_meta.addOption([]const u8, "commit", "");
     default_meta.addOption([]const u8, "branch", "");
     libary_module.addOptions("fangz_meta", default_meta);
+
+    const docs_step = b.step("docs", "Generate the documentation");
 
     const documentation_library = b.addLibrary(.{
         .name = mod_name,
@@ -42,10 +50,20 @@ pub fn build(b: *std.Build) void {
         .install_subdir = "docs",
     });
 
-    const docs_step = b.step("docs", "Generate the documentation");
     docs_step.dependOn(&docs.step);
 
-    const tests = b.addTest(.{
+    const test_step = b.step("tests", "Run the test suite");
+
+    const unit_tests = b.addTest(.{
+        .name = "Unit Tests",
+        .root_module = libary_module,
+    });
+
+    const run_unit_tests = b.addRunArtifact(unit_tests);
+    test_step.dependOn(&run_unit_tests.step);
+
+    const integration_tests = b.addTest(.{
+        .name = "Integration Tests",
         .root_module = b.createModule(.{
             .root_source_file = b.path("tests/suite.zig"),
             .target = target,
@@ -57,9 +75,8 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    const test_step = b.step("tests", "Run the test suite");
-    const run_tests = b.addRunArtifact(tests);
-    test_step.dependOn(&run_tests.step);
+    const run_integration_tests = b.addRunArtifact(integration_tests);
+    test_step.dependOn(&run_integration_tests.step);
 }
 
 /// Injects the consumer's binary name, manifest version, and current git commit/branch into the fangz library module as a `fangz_meta` options module, making them available as defaults inside `App.init`.
@@ -96,15 +113,20 @@ pub fn injectMeta(
 }
 
 fn extractVersion(b: *std.Build) ?[]const u8 {
+    var io_impl: std.Io.Threaded = .init(b.allocator, .{});
+    defer io_impl.deinit();
+
+    const io = io_impl.io();
     const content = b.build_root.handle.readFileAlloc(
-        b.allocator,
+        io,
         "build.zig.zon",
-        64 * 1024,
+        b.allocator,
+        .unlimited,
     ) catch return null;
     const marker = ".version = \"";
     const start = std.mem.indexOf(u8, content, marker) orelse return null;
     const after = content[start + marker.len ..];
-    const end = std.mem.indexOfScalar(u8, after, '"') orelse return null;
+    const end = std.mem.findScalar(u8, after, '"') orelse return null;
     return b.dupe(after[0..end]);
 }
 

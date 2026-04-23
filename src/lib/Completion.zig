@@ -1,23 +1,22 @@
 //! Shell completion script generation and dynamic suggestion endpoint.
 //!
-//! This module provides static script emitters for multiple shells and a shared
-//! `__complete` runtime suggestion path used by dynamic completion integrations.
+//! This module provides static script emitters for multiple shells and a shared `__complete` runtime suggestion path used by dynamic completion integrations.
 //!
 //! ## Typed API
 //!
-//! Use `generateCompletions(root, shell, writer)` with the `Shell` enum for
-//! type-safe script generation.  The shell-string-based `printCompletionScript`
-//! is kept for the built-in `completion <shell>` subcommand.
+//! Use `generateCompletions(root, shell, writer)` with the `Shell` enum for type-safe script generation.  The shell-string-based `printCompletionScript` is kept for the built-in `completion <shell>` subcommand.
 //!
 //! ## Dynamic suggestions
 //!
 //! When a flag is being completed with `--name=<prefix>`, suggestions include:
+//!
 //! - For `enum_tag` and `string` flags with `allowed_values`: the allowed values.
 //! - For `key_value_list` flags: `--name=<key>=` candidates from `allowed_keys`.
 //! - For `key_value_list` flags after `--name=<key>=`: `--name=<key>=<value>`
 //!   candidates from `allowed_values`.
 
 const std = @import("std");
+
 const Command = @import("Command.zig");
 const ParseContext = @import("ParseContext.zig");
 
