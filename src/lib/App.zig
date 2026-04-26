@@ -6,6 +6,7 @@
 
 const App = @This();
 
+const builtin = @import("builtin");
 const std = @import("std");
 const carnaval = @import("carnaval");
 const meta = @import("fangz_meta");
@@ -44,11 +45,6 @@ pub const Init = struct {
 
 /// Constructs an application with a root command.
 pub fn init(allocator: std.mem.Allocator, cfg: Init) FangzError!App {
-    if (@import("builtin").os.tag == .windows) {
-        const win = std.os.windows;
-        _ = win.kernel32.SetConsoleOutputCP(65001);
-    }
-
     // Fall back to build-injected meta when fields are absent.
     const name = cfg.name orelse meta.name;
     const version: ?[]const u8 = if (cfg.version) |v|
@@ -191,9 +187,10 @@ pub fn generateCompletions(self: *App, shell: Completion.Shell, writer: anytype)
 /// Renders help text for the given command to stdout.
 pub fn printHelp(self: *App, command: *const Command) !void {
     _ = self;
-    const profile = carnaval.colorProfileForHandle(std.fs.File.stdout().handle);
+    const io = currentIo();
+    const profile = carnaval.colorProfileForHandle(std.Io.File.stdout().handle);
     var stdout_buffer: [4096]u8 = undefined;
-    var out_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    var out_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
     try HelpRenderer.render(&out_writer.interface, command, profile);
     try out_writer.interface.flush();
 }
@@ -201,9 +198,10 @@ pub fn printHelp(self: *App, command: *const Command) !void {
 /// Prints a styled error and optional hint to stderr.
 pub fn printError(self: *App, message: []const u8, hint: ?[]const u8) !void {
     _ = self;
-    const profile = carnaval.colorProfileForHandle(std.fs.File.stderr().handle);
+    const io = currentIo();
+    const profile = carnaval.colorProfileForHandle(std.Io.File.stderr().handle);
     var stderr_buffer: [4096]u8 = undefined;
-    var err_writer = std.fs.File.stderr().writer(&stderr_buffer);
+    var err_writer = std.Io.File.stderr().writer(io, &stderr_buffer);
     try carnaval.Style.init().fg(.{ .ansi16 = .red }).renderWithProfile("error:", &err_writer.interface, profile);
     try err_writer.interface.print(" {s}\n", .{message});
     if (hint) |h| {
@@ -250,7 +248,7 @@ fn printVersion(self: *App) !void {
     if (version == null and !has_git) return;
 
     var stdout_buffer: [512]u8 = undefined;
-    var out_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    var out_writer = std.Io.File.stdout().writer(&stdout_buffer);
 
     if (version) |v| {
         if (has_git) {
@@ -283,4 +281,11 @@ fn ensureCompletionCommand(self: *App) !void {
     if (self.completion_registered) return;
     try Completion.registerCompletionCommand(self.root());
     self.completion_registered = true;
+}
+
+fn currentIo() std.Io {
+    return if (builtin.is_test)
+        std.testing.io
+    else
+        std.Io.Threaded.global_single_threaded.io();
 }

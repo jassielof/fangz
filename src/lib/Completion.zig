@@ -16,6 +16,7 @@
 //!   candidates from `allowed_values`.
 
 const std = @import("std");
+const builtin = @import("builtin");
 
 const Command = @import("Command.zig");
 const ParseContext = @import("ParseContext.zig");
@@ -62,8 +63,9 @@ pub fn runCompletionCommand(ctx: *ParseContext) !void {
 /// Writes completion script for requested shell (string-based, used by the
 /// built-in `completion` subcommand).
 pub fn printCompletionScript(root: *Command, shell: []const u8, dynamic: bool) !void {
+    const io = currentIo();
     var buf: [8192]u8 = undefined;
-    var out = std.fs.File.stdout().writer(&buf);
+    var out = std.Io.File.stdout().writer(io, &buf);
     const w = &out.interface;
     if (std.mem.eql(u8, shell, "bash")) {
         try renderBash(w, root.name);
@@ -104,8 +106,9 @@ pub fn generateCompletions(root: *Command, shell: Shell, writer: anytype) !void 
 
 /// Prints dynamic completion suggestions for `__complete`.
 pub fn printDynamicSuggestions(root: *Command, args: []const []const u8) !void {
+    const io = currentIo();
     var out_buf: [8192]u8 = undefined;
-    var out = std.fs.File.stdout().writer(&out_buf);
+    var out = std.Io.File.stdout().writer(io, &out_buf);
     const writer = &out.interface;
 
     var active = root;
@@ -237,6 +240,13 @@ fn suggestFlagValues(
             }
         }
     }
+}
+
+fn currentIo() std.Io {
+    return if (builtin.is_test)
+        std.testing.io
+    else
+        std.Io.Threaded.global_single_threaded.io();
 }
 
 /// Checks whether a token references a flag that consumes a value.

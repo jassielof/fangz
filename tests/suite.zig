@@ -212,6 +212,7 @@ test "bundle with attached value on bool flags errors" {
 test "doc generator writes single markdown file by default" {
     var app = try makeApp();
     defer app.deinit();
+    const io = testing.io;
 
     const root = app.root();
     try root.addFlag(bool, .{
@@ -232,8 +233,8 @@ test "doc generator writes single markdown file by default" {
     });
 
     const out_dir = "zig-out/docgen-single";
-    std.fs.cwd().deleteTree(out_dir) catch {};
-    defer std.fs.cwd().deleteTree(out_dir) catch {};
+    std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
+    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
 
     try app.generateMarkdownDocs(.{
         .mode = .single_file,
@@ -241,7 +242,7 @@ test "doc generator writes single markdown file by default" {
     });
 
     const path = out_dir ++ "/cli.md";
-    const content = try readFileAlloc(testing.allocator, path);
+    const content = try readFileAlloc(io, testing.allocator, path);
     defer testing.allocator.free(content);
 
     try testing.expect(std.mem.indexOf(u8, content, "# `git`") != null);
@@ -253,6 +254,7 @@ test "doc generator writes single markdown file by default" {
 test "doc generator writes one file per command" {
     var app = try makeApp();
     defer app.deinit();
+    const io = testing.io;
 
     const root = app.root();
     const remote = try root.addSubcommand(.{
@@ -265,31 +267,28 @@ test "doc generator writes one file per command" {
     });
 
     const out_dir = "zig-out/docgen-tree";
-    std.fs.cwd().deleteTree(out_dir) catch {};
-    defer std.fs.cwd().deleteTree(out_dir) catch {};
+    std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
+    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
 
     try app.generateMarkdownDocs(.{
         .mode = .per_command,
         .output_dir = out_dir,
     });
 
-    const root_doc = try readFileAlloc(testing.allocator, out_dir ++ "/index.md");
+    const root_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/index.md");
     defer testing.allocator.free(root_doc);
     try testing.expect(std.mem.indexOf(u8, root_doc, "[`remote`](remote/index.md)") != null);
 
-    const remote_doc = try readFileAlloc(testing.allocator, out_dir ++ "/remote/index.md");
+    const remote_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/remote/index.md");
     defer testing.allocator.free(remote_doc);
     try testing.expect(std.mem.indexOf(u8, remote_doc, "# `git remote`") != null);
     try testing.expect(std.mem.indexOf(u8, remote_doc, "[`add`](add/index.md)") != null);
 
-    const add_doc = try readFileAlloc(testing.allocator, out_dir ++ "/remote/add/index.md");
+    const add_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/remote/add/index.md");
     defer testing.allocator.free(add_doc);
     try testing.expect(std.mem.indexOf(u8, add_doc, "# `git remote add`") != null);
 }
 
-fn readFileAlloc(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
-    const stat = try file.stat();
-    return file.readToEndAlloc(allocator, stat.size + 64);
+fn readFileAlloc(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
 }

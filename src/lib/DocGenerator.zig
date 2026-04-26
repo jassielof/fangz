@@ -3,7 +3,19 @@
 //! Supports self-contained single-file output and per-command directory output.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Command = @import("Command.zig");
+
+const ListWriter = struct {
+    allocator: std.mem.Allocator,
+    list: *std.ArrayList(u8),
+
+    pub fn print(self: ListWriter, comptime format: []const u8, args: anytype) !void {
+        const chunk = try std.fmt.allocPrint(self.allocator, format, args);
+        defer self.allocator.free(chunk);
+        try self.list.appendSlice(self.allocator, chunk);
+    }
+};
 
 /// Modes for generation the documentation.
 pub const Mode = enum {
@@ -34,7 +46,8 @@ pub fn generateMarkdownDocs(
     options: Options,
 ) !void {
     _ = options.include_hidden; // Reserved for future hidden-command support.
-    try std.fs.cwd().makePath(options.output_dir);
+    const io = currentIo();
+    try std.Io.Dir.cwd().createDirPath(io, options.output_dir);
 
     switch (options.mode) {
         .single_file => {
@@ -43,10 +56,10 @@ pub fn generateMarkdownDocs(
 
             const output_path = try std.fs.path.join(allocator, &.{ options.output_dir, options.single_file_name });
             defer allocator.free(output_path);
-            try writeFile(output_path, doc, options.overwrite);
+            try writeFile(io, output_path, doc, options.overwrite);
         },
         .per_command => {
-            try writePerCommand(allocator, root, options.output_dir, options.overwrite);
+            try writePerCommand(io, allocator, root, options.output_dir, options.overwrite);
         },
     }
 }
@@ -67,7 +80,7 @@ fn appendCommandDocRecursive(
     cmd: *const Command,
     is_first: bool,
 ) !void {
-    const w = out.writer(allocator);
+    var w = ListWriter{ .allocator = allocator, .list = out };
     if (!is_first) {
         try w.print("\n---\n\n", .{});
     }
@@ -83,41 +96,42 @@ fn appendCommandDocRecursive(
 
 /// Writes command docs as one file per command directory.
 fn writePerCommand(
+    io: std.Io,
     allocator: std.mem.Allocator,
     cmd: *const Command,
     dir_path: []const u8,
     overwrite: bool,
 ) !void {
-    try std.fs.cwd().makePath(dir_path);
+    try std.Io.Dir.cwd().createDirPath(io, dir_path);
 
     const body = try renderCommandMarkdown(allocator, cmd, true);
     defer allocator.free(body);
 
     const file_path = try std.fs.path.join(allocator, &.{ dir_path, "index.md" });
     defer allocator.free(file_path);
-    try writeFile(file_path, body, overwrite);
+    try writeFile(io, file_path, body, overwrite);
 
     for (cmd.subcommands.items) |sub| {
         const slug = try slugify(allocator, sub.name);
         defer allocator.free(slug);
         const child_dir = try std.fs.path.join(allocator, &.{ dir_path, slug });
         defer allocator.free(child_dir);
-        try writePerCommand(allocator, sub, child_dir, overwrite);
+        try writePerCommand(io, allocator, sub, child_dir, overwrite);
     }
 }
 
 /// Writes one file with overwrite semantics.
-fn writeFile(path: []const u8, content: []const u8, overwrite: bool) !void {
+fn writeFile(io: std.Io, path: []const u8, content: []const u8, overwrite: bool) !void {
     if (std.fs.path.dirname(path)) |parent| {
-        if (parent.len > 0) try std.fs.cwd().makePath(parent);
+        if (parent.len > 0) try std.Io.Dir.cwd().createDirPath(io, parent);
     }
 
-    const file = try std.fs.cwd().createFile(path, .{
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{
         .truncate = overwrite,
         .exclusive = !overwrite,
     });
-    defer file.close();
-    try file.writeAll(content);
+    defer file.close(io);
+    try file.writeStreamingAll(io, content);
 }
 
 /// Renders one command markdown document section.
@@ -128,7 +142,7 @@ fn renderCommandMarkdown(
 ) ![]u8 {
     var out = try std.ArrayList(u8).initCapacity(allocator, 2048);
     errdefer out.deinit(allocator);
-    const w = out.writer(allocator);
+    var w = ListWriter{ .allocator = allocator, .list = &out };
 
     const path_name = try commandPath(allocator, cmd);
     defer allocator.free(path_name);
@@ -215,6 +229,13 @@ fn renderCommandMarkdown(
     return out.toOwnedSlice(allocator);
 }
 
+fn currentIo() std.Io {
+    return if (builtin.is_test)
+        std.testing.io
+    else
+        std.Io.Threaded.global_single_threaded.io();
+}
+
 /// Appends options table rows for local and inherited persistent flags.
 fn appendOptionsTable(allocator: std.mem.Allocator, cmd: *const Command, w: anytype) !void {
     var chain = try cmd.collectAncestorPath(allocator);
@@ -256,7 +277,7 @@ fn appendOptionsTable(allocator: std.mem.Allocator, cmd: *const Command, w: anyt
 fn optionDescription(allocator: std.mem.Allocator, flag: Command.Flag) ![]u8 {
     var out = try std.ArrayList(u8).initCapacity(allocator, 128);
     errdefer out.deinit(allocator);
-    const w = out.writer(allocator);
+    var w = ListWriter{ .allocator = allocator, .list = &out };
 
     try w.print("{s}", .{flag.description});
     if (flag.allowed_values) |values| {
@@ -335,7 +356,7 @@ fn commandPath(allocator: std.mem.Allocator, cmd: *const Command) ![]u8 {
 
     var out = try std.ArrayList(u8).initCapacity(allocator, 64);
     errdefer out.deinit(allocator);
-    const w = out.writer(allocator);
+    var w = ListWriter{ .allocator = allocator, .list = &out };
     for (chain.items, 0..) |node, i| {
         if (i != 0) try w.print(" ", .{});
         try w.print("{s}", .{node.name});

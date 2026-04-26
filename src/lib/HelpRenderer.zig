@@ -1,9 +1,11 @@
 //! Clap-style help renderer for Fangz command trees.
 
 const std = @import("std");
+
 const carnaval = @import("carnaval");
-const Command = @import("Command.zig");
 const ColorProfile = carnaval.ColorProfile;
+
+const Command = @import("Command.zig");
 
 /// Renders command help sections to the provided writer.
 pub fn render(writer: anytype, command: *const Command, profile: ColorProfile) !void {
@@ -12,7 +14,7 @@ pub fn render(writer: anytype, command: *const Command, profile: ColorProfile) !
     if (command.description.len > 0) {
         try writer.print("{s}\n", .{command.description});
     }
-    const terminal_width = carnaval.terminalWidthForHandle(std.fs.File.stdout().handle);
+    const terminal_width = carnaval.terminalWidthForHandle(std.Io.File.stdout().handle);
     try renderUsage(writer, command, profile);
 
     if (command.positionals.items.len > 0) {
@@ -253,7 +255,7 @@ fn renderOneFlag(
             .int => |v| try d.print(" [default: {}]", .{v}),
             .float => |v| try d.print(" [default: {d}]", .{v}),
             .enum_tag => |ordinal| try d.print(" [default: {s}]", .{enumTagName(flag, ordinal)}),
-            .string_list => |_| try d.print(" [default: set]", .{}),
+            .string_list => try d.print(" [default: set]", .{}),
         }
     }
     if (flag.allowed_values) |values| {
