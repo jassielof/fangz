@@ -4,19 +4,21 @@
 //! lifecycles, and provides convenience helpers for help, errors, completions,
 //! and documentation generation.
 
-const App = @This();
-
-const builtin = @import("builtin");
 const std = @import("std");
+const builtin = @import("builtin");
+
 const carnaval = @import("carnaval");
 const meta = @import("fangz_meta");
+
 const Command = @import("Command.zig");
-const FangzError = @import("error.zig").FangzError;
 const Completion = @import("Completion.zig");
 const DocGenerator = @import("DocGenerator.zig");
+const FangzError = @import("error.zig").FangzError;
 const HelpRenderer = @import("HelpRenderer.zig");
 const ParseContext = @import("ParseContext.zig");
 const Parser = @import("Parser.zig");
+
+const App = @This();
 
 allocator: std.mem.Allocator,
 root_command: Command,
