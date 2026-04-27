@@ -131,31 +131,33 @@ fn extractVersion(b: *std.Build) ?[]const u8 {
 }
 
 fn extractGitCommit(b: *std.Build) []const u8 {
-    const result = std.process.Child.run(.{
-        .allocator = b.allocator,
+    const result = std.process.run(b.allocator, b.graph.io, .{
         .argv = &.{ "git", "rev-parse", "--short", "HEAD" },
-        .cwd = b.pathFromRoot("."),
+        .cwd = .inherit,
     }) catch return "";
     defer {
         b.allocator.free(result.stdout);
         b.allocator.free(result.stderr);
     }
-    if (result.term != .Exited or result.term.Exited != 0) return "";
+    if (result.term != .exited or result.term.exited != 0) return "";
     const trimmed = std.mem.trim(u8, result.stdout, " \n\r\t");
     return if (trimmed.len > 0) b.dupe(trimmed) else "";
 }
 
 fn extractGitBranch(b: *std.Build) []const u8 {
-    const result = std.process.Child.run(.{
-        .allocator = b.allocator,
-        .argv = &.{ "git", "rev-parse", "--abbrev-ref", "HEAD" },
-        .cwd = b.pathFromRoot("."),
-    }) catch return "";
+    const result = std.process.run(
+        b.allocator,
+        b.graph.io,
+        .{
+            .argv = &.{ "git", "rev-parse", "--abbrev-ref", "HEAD" },
+            .cwd = .inherit,
+        },
+    ) catch return "";
     defer {
         b.allocator.free(result.stdout);
         b.allocator.free(result.stderr);
     }
-    if (result.term != .Exited or result.term.Exited != 0) return "";
+    if (result.term != .exited or result.term.exited != 0) return "";
     const trimmed = std.mem.trim(u8, result.stdout, " \n\r\t");
     if (trimmed.len > 0 and !std.mem.eql(u8, trimmed, "HEAD")) {
         return b.dupe(trimmed);
@@ -163,19 +165,18 @@ fn extractGitBranch(b: *std.Build) []const u8 {
 
     // Detached HEAD: read refs/heads (shared with the bare repo via the worktree).
     // In a bare clone zigit worktree, refs/heads/main is always present.
-    const refs = std.process.Child.run(.{
-        .allocator = b.allocator,
+    const refs = std.process.run(b.allocator, b.graph.io, .{
         .argv = &.{ "git", "for-each-ref", "--format=%(refname:short)", "refs/heads" },
-        .cwd = b.pathFromRoot("."),
-    }) catch return "";
+        .cwd = .inherit,
+    },) catch return "";
     defer {
         b.allocator.free(refs.stdout);
         b.allocator.free(refs.stderr);
     }
-    if (refs.term != .Exited or refs.term.Exited != 0) return "";
+    if (refs.term != .exited or refs.term.exited != 0) return "";
     const refs_trim = std.mem.trim(u8, refs.stdout, " \n\r\t");
     if (refs_trim.len > 0) {
-        const newline = std.mem.indexOfScalar(u8, refs_trim, '\n') orelse refs_trim.len;
+        const newline = std.mem.findScalar(u8, refs_trim, '\n') orelse refs_trim.len;
         const first = std.mem.trim(u8, refs_trim[0..newline], " \r\t");
         if (first.len > 0) return b.dupe(first);
     }
