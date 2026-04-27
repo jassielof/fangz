@@ -180,8 +180,7 @@ pub fn generateMarkdownDocs(self: *App, options: DocGenerator.Options) !void {
 
 /// Generates a shell completion script to the provided writer.
 ///
-/// Use the `Shell` enum for type-safe shell selection.  The script delegates
-/// to the `__complete` runtime endpoint for dynamic suggestions.
+/// Use the `Shell` enum for type-safe shell selection.  The script delegates to the `__complete` runtime endpoint for dynamic suggestions.
 pub fn generateCompletions(self: *App, shell: Completion.Shell, writer: anytype) !void {
     try Completion.generateCompletions(&self.root_command, shell, writer);
 }
