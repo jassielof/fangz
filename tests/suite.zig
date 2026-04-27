@@ -1,7 +1,12 @@
 const std = @import("std");
+const testing = std.testing;
+const refAllDecls = testing.refAllDecls;
+
 const fangz = @import("fangz");
 
-const testing = std.testing;
+comptime {
+    refAllDecls(@This());
+}
 
 fn makeApp() !fangz.App {
     return fangz.App.init(testing.allocator, .{

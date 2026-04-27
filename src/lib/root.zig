@@ -1,5 +1,8 @@
 //! Fangz is a command-line parser library.
 
+const std = @import("std");
+const refAllDecls = std.testing.refAllDecls;
+
 pub const App = @import("App.zig");
 pub const Command = @import("Command.zig");
 pub const KeyValuePair = Command.KeyValuePair;
@@ -10,3 +13,7 @@ pub const ParseContext = @import("ParseContext.zig");
 /// Supported shell targets for completion script generation.
 pub const Shell = @import("Completion.zig").Shell;
 pub const Tokenizer = @import("Tokenizer.zig");
+
+comptime {
+    refAllDecls(@This());
+}
