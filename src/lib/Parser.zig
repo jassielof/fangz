@@ -52,19 +52,19 @@ pub const Diagnostic = struct {
 };
 
 /// Parses argv against the command tree and returns a parse output context.
-pub fn parse(allocator: std.mem.Allocator, root: *Command, argv: []const []const u8) !ParseOutput {
+pub fn parse(allocator: std.mem.Allocator, io: std.Io, root: *Command, argv: []const []const u8) !ParseOutput {
     // freeze() is called by App before parsing; fall back to bindAliases here
     // only when Parser is used directly without going through App.
     if (!root.frozen) try root.bindAliases();
 
     const dispatch = try walkCommandPath(allocator, root, argv);
     if (dispatch.help_for) |help_cmd| {
-        var help_ctx = try ParseContext.init(allocator, help_cmd);
+        var help_ctx = try ParseContext.init(allocator, io, help_cmd);
         help_ctx.help_requested = true;
         return .{ .context = help_ctx, .failure = null };
     }
 
-    var ctx = try ParseContext.init(allocator, dispatch.command);
+    var ctx = try ParseContext.init(allocator, io, dispatch.command);
     errdefer ctx.deinit();
     try applyDefaults(&ctx, dispatch.command);
 
@@ -149,6 +149,7 @@ fn parseLongFlag(
         return;
     }
     if (std.mem.eql(u8, body, "version")) {
+        if (!commandAllowsVersion(command)) return ParseError.UnknownFlag;
         ctx.version_requested = true;
         return;
     }
@@ -188,6 +189,7 @@ fn parseShortBundle(
             continue;
         }
         if (ch == 'V') {
+            if (!commandAllowsVersion(command)) return ParseError.UnknownFlag;
             ctx.version_requested = true;
             continue;
         }
@@ -342,6 +344,10 @@ fn validateEnum(flag: Command.Flag, value: []const u8) !void {
         if (std.mem.eql(u8, candidate, value)) return;
     }
     return ParseError.InvalidEnumValue;
+}
+
+fn commandAllowsVersion(command: *const Command) bool {
+    return command.parent == null and command.rootConst().version != null;
 }
 
 /// Seeds the context with default values for visible flags.
@@ -510,7 +516,7 @@ fn detectTargetCommand(root: *Command, argv: []const []const u8) *Command {
 fn findUnknownFlagToken(argv: []const []const u8) ?[]const u8 {
     for (argv) |token| {
         if (std.mem.startsWith(u8, token, "--") and !std.mem.eql(u8, token, "--")) return token;
-        if (std.mem.startsWith(u8, token, "-") and token.len > 1 and !std.mem.eql(u8, token, "-h") and !std.mem.eql(u8, token, "-V")) return token;
+        if (std.mem.startsWith(u8, token, "-") and token.len > 1 and !std.mem.eql(u8, token, "-h")) return token;
     }
     return null;
 }

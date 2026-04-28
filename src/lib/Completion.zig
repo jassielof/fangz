@@ -16,8 +16,6 @@
 //!   candidates from `allowed_values`.
 
 const std = @import("std");
-const builtin = @import("builtin");
-
 const Command = @import("Command.zig");
 const ParseContext = @import("ParseContext.zig");
 
@@ -57,13 +55,12 @@ pub fn registerCompletionCommand(root: *Command) !void {
 pub fn runCompletionCommand(ctx: *ParseContext) !void {
     const shell = ctx.positional(0) orelse return error.MissingRequiredPositional;
     const dynamic = ctx.boolFlag("dynamic") orelse false;
-    try printCompletionScript(ctx.command.root(), shell, dynamic);
+    try printCompletionScript(ctx.io, ctx.command.root(), shell, dynamic);
 }
 
 /// Writes completion script for requested shell (string-based, used by the
 /// built-in `completion` subcommand).
-pub fn printCompletionScript(root: *Command, shell: []const u8, dynamic: bool) !void {
-    const io = currentIo();
+pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8, dynamic: bool) !void {
     var buf: [8192]u8 = undefined;
     var out = std.Io.File.stdout().writer(io, &buf);
     const w = &out.interface;
@@ -105,8 +102,7 @@ pub fn generateCompletions(root: *Command, shell: Shell, writer: anytype) !void 
 }
 
 /// Prints dynamic completion suggestions for `__complete`.
-pub fn printDynamicSuggestions(root: *Command, args: []const []const u8) !void {
-    const io = currentIo();
+pub fn printDynamicSuggestions(io: std.Io, root: *Command, args: []const []const u8) !void {
     var out_buf: [8192]u8 = undefined;
     var out = std.Io.File.stdout().writer(io, &out_buf);
     const writer = &out.interface;
@@ -240,13 +236,6 @@ fn suggestFlagValues(
             }
         }
     }
-}
-
-fn currentIo() std.Io {
-    return if (builtin.is_test)
-        std.testing.io
-    else
-        std.Io.Threaded.global_single_threaded.io();
 }
 
 /// Checks whether a token references a flag that consumes a value.

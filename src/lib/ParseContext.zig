@@ -10,10 +10,10 @@
 //! key/value slices inside `KeyValuePair` — is a direct sub-slice of the
 //! original argv allocation.  No per-value string duplication is performed.
 //!
-//! Concretely, when called through `App.executeProcess` / `App.parseProcess`,
-//! the lifetime of these slices is tied to the `args_z` allocation inside
-//! those functions.  The `ParseContext` is handed to hooks *inside* that
-//! scope, so all borrows are valid for the duration of any hook callback.
+//! Concretely, when called through `App.executeProcess`, these slices are tied
+//! to owned argument copies kept alive for the duration of command execution.
+//! `App.parseProcess` keeps those owned copies on the app until the next parse
+//! or `App.deinit`.
 //!
 //! If you hold a `*ParseContext` obtained from `App.parseFrom` with a
 //! caller-owned argv slice, ensure the argv allocation outlives the context.
@@ -43,6 +43,7 @@ pub const FlagValue = union(enum) {
 const ParseContext = @This();
 
 allocator: std.mem.Allocator,
+io: std.Io,
 command: *Command,
 flags: std.StringHashMap(FlagValue),
 positionals: std.ArrayList([]const u8),
@@ -51,9 +52,10 @@ help_requested: bool = false,
 version_requested: bool = false,
 
 /// Initializes an empty parse context for a command.
-pub fn init(allocator: std.mem.Allocator, command: *Command) !ParseContext {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, command: *Command) !ParseContext {
     return .{
         .allocator = allocator,
+        .io = io,
         .command = command,
         .flags = std.StringHashMap(FlagValue).init(allocator),
         .positionals = try std.ArrayList([]const u8).initCapacity(allocator, 0),

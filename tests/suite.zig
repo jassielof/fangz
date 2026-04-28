@@ -9,7 +9,7 @@ comptime {
 }
 
 fn makeApp() !fangz.App {
-    return fangz.App.init(testing.allocator, .{
+    return fangz.App.init(testing.allocator, testing.io, .{
         .name = "git",
         .description = "test app",
         .version = "1.2.3",
@@ -136,6 +136,26 @@ test "completion command with no args requests help" {
     const ctx = try app.parseFrom(&.{"completion"});
     try testing.expect(ctx.help_requested);
     try testing.expectEqualStrings("completion", ctx.command.name);
+}
+
+test "version flag is only available on root command" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    _ = try app.root().addSubcommand(.{ .name = "status", .description = "show status" });
+
+    const root_long = try app.parseFrom(&.{"--version"});
+    try testing.expect(root_long.version_requested);
+    try testing.expectEqualStrings("git", root_long.command.name);
+
+    const root_short = try app.parseFrom(&.{"-V"});
+    try testing.expect(root_short.version_requested);
+    try testing.expectEqualStrings("git", root_short.command.name);
+
+    try testing.expectError(error.UnknownFlag, app.parseFrom(&.{ "status", "--version" }));
+    try testing.expectError(error.UnknownFlag, app.parseFrom(&.{ "status", "-V" }));
+    try testing.expectError(error.UnknownFlag, app.parseFrom(&.{ "completion", "--version" }));
+    try testing.expectError(error.UnknownFlag, app.parseFrom(&.{ "completion", "-V" }));
 }
 
 test "repeatable string list flag accumulates values" {

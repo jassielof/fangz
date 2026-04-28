@@ -3,7 +3,6 @@
 //! Supports self-contained single-file output and per-command directory output.
 
 const std = @import("std");
-const builtin = @import("builtin");
 const Command = @import("Command.zig");
 
 const ListWriter = struct {
@@ -42,11 +41,11 @@ pub const Options = struct {
 /// Generates markdown documentation for the given command hierarchy based on the provided options.
 pub fn generateMarkdownDocs(
     allocator: std.mem.Allocator,
+    io: std.Io,
     root: *const Command,
     options: Options,
 ) !void {
     _ = options.include_hidden; // Reserved for future hidden-command support.
-    const io = currentIo();
     try std.Io.Dir.cwd().createDirPath(io, options.output_dir);
 
     switch (options.mode) {
@@ -227,13 +226,6 @@ fn renderCommandMarkdown(
     }
 
     return out.toOwnedSlice(allocator);
-}
-
-fn currentIo() std.Io {
-    return if (builtin.is_test)
-        std.testing.io
-    else
-        std.Io.Threaded.global_single_threaded.io();
 }
 
 /// Appends options table rows for local and inherited persistent flags.

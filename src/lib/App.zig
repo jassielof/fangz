@@ -5,8 +5,6 @@
 //! and documentation generation.
 
 const std = @import("std");
-const builtin = @import("builtin");
-
 const carnaval = @import("carnaval");
 const meta = @import("fangz_meta");
 
@@ -21,8 +19,10 @@ const Parser = @import("Parser.zig");
 const App = @This();
 
 allocator: std.mem.Allocator,
+io: std.Io,
 root_command: Command,
 last_context: ?ParseContext = null,
+owned_process_args: std.ArrayList([]const u8) = .empty,
 completions_enabled: bool = true,
 completion_registered: bool = false,
 commit: []const u8 = "",
@@ -46,7 +46,9 @@ pub const Init = struct {
 };
 
 /// Constructs an application with a root command.
-pub fn init(allocator: std.mem.Allocator, cfg: Init) FangzError!App {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: Init) FangzError!App {
+    prepareConsole();
+
     // Fall back to build-injected meta when fields are absent.
     const name = cfg.name orelse meta.name;
     const version: ?[]const u8 = if (cfg.version) |v|
@@ -60,6 +62,7 @@ pub fn init(allocator: std.mem.Allocator, cfg: Init) FangzError!App {
 
     return .{
         .allocator = allocator,
+        .io = io,
         .commit = commit,
         .branch = branch,
         .root_command = try Command.init(allocator, .{
@@ -73,6 +76,7 @@ pub fn init(allocator: std.mem.Allocator, cfg: Init) FangzError!App {
 /// Releases app-owned parse state and command tree memory.
 pub fn deinit(self: *App) void {
     if (self.last_context) |*ctx| ctx.deinit();
+    self.freeOwnedProcessArgs();
     self.root_command.deinit();
 }
 
@@ -92,21 +96,25 @@ pub fn parseFrom(self: *App, argv: []const []const u8) FangzError!*ParseContext 
     try self.root_command.freeze();
     if (self.last_context) |*ctx| ctx.deinit();
     self.last_context = null;
+    self.freeOwnedProcessArgs();
 
-    const output = try Parser.parse(self.allocator, self.root(), argv);
+    const output = try Parser.parse(self.allocator, self.io, self.root(), argv);
     self.last_context = output.context;
     return &self.last_context.?;
 }
 
 /// Parses the current process argv and returns the parse context.
-pub fn parseProcess(self: *App) FangzError!*ParseContext {
-    const args_z = try std.process.argsAlloc(self.allocator);
-    defer std.process.argsFree(self.allocator, args_z);
+pub fn parseProcess(self: *App, process_args: std.process.Args) FangzError!*ParseContext {
+    try self.ensureCompletionCommand();
+    try self.root_command.freeze();
+    if (self.last_context) |*ctx| ctx.deinit();
+    self.last_context = null;
+    self.freeOwnedProcessArgs();
 
-    var args = try std.ArrayList([]const u8).initCapacity(self.allocator, args_z.len -| 1);
-    defer args.deinit(self.allocator);
-    for (args_z[1..]) |arg| try args.append(self.allocator, arg);
-    return self.parseFrom(args.items);
+    try self.collectProcessArgsInto(process_args, &self.owned_process_args);
+    const output = try Parser.parse(self.allocator, self.io, self.root(), self.owned_process_args.items);
+    self.last_context = output.context;
+    return &self.last_context.?;
 }
 
 /// Parses and executes command hooks for explicit argv input.
@@ -115,7 +123,7 @@ pub fn executeFrom(self: *App, argv: []const []const u8) anyerror!void {
     try self.root_command.freeze();
 
     if (self.completions_enabled and argv.len > 0 and std.mem.eql(u8, argv[0], "__complete")) {
-        try Completion.printDynamicSuggestions(self.root(), argv[1..]);
+        try Completion.printDynamicSuggestions(self.io, self.root(), argv[1..]);
         return;
     }
 
@@ -163,19 +171,43 @@ pub fn executeFrom(self: *App, argv: []const []const u8) anyerror!void {
 }
 
 /// Parses and executes command hooks using current process argv.
-pub fn executeProcess(self: *App) anyerror!void {
-    const args_z = try std.process.argsAlloc(self.allocator);
-    defer std.process.argsFree(self.allocator, args_z);
-
-    var args = try std.ArrayList([]const u8).initCapacity(self.allocator, args_z.len -| 1);
-    defer args.deinit(self.allocator);
-    for (args_z[1..]) |arg| try args.append(self.allocator, arg);
+pub fn executeProcess(self: *App, process_args: std.process.Args) anyerror!void {
+    var args = try self.collectProcessArgs(process_args);
+    defer self.deinitOwnedArgs(&args);
     try self.executeFrom(args.items);
+}
+
+fn collectProcessArgs(self: *App, process_args: std.process.Args) !std.ArrayList([]const u8) {
+    var args: std.ArrayList([]const u8) = .empty;
+    errdefer self.deinitOwnedArgs(&args);
+    try self.collectProcessArgsInto(process_args, &args);
+    return args;
+}
+
+fn collectProcessArgsInto(self: *App, process_args: std.process.Args, args: *std.ArrayList([]const u8)) !void {
+    var it = try std.process.Args.Iterator.initAllocator(process_args, self.allocator);
+    defer it.deinit();
+
+    _ = it.skip();
+
+    while (it.next()) |arg| {
+        try args.append(self.allocator, try self.allocator.dupe(u8, arg));
+    }
+}
+
+fn deinitOwnedArgs(self: *App, args: *std.ArrayList([]const u8)) void {
+    for (args.items) |arg| self.allocator.free(arg);
+    args.deinit(self.allocator);
+}
+
+fn freeOwnedProcessArgs(self: *App) void {
+    self.deinitOwnedArgs(&self.owned_process_args);
+    self.owned_process_args = .empty;
 }
 
 /// Generates markdown docs for the current command tree.
 pub fn generateMarkdownDocs(self: *App, options: DocGenerator.Options) !void {
-    try DocGenerator.generateMarkdownDocs(self.allocator, self.root(), options);
+    try DocGenerator.generateMarkdownDocs(self.allocator, self.io, self.root(), options);
 }
 
 /// Generates a shell completion script to the provided writer.
@@ -187,22 +219,20 @@ pub fn generateCompletions(self: *App, shell: Completion.Shell, writer: anytype)
 
 /// Renders help text for the given command to stdout.
 pub fn printHelp(self: *App, command: *const Command) !void {
-    _ = self;
-    const io = currentIo();
+    prepareConsole();
     const profile = carnaval.colorProfileForHandle(std.Io.File.stdout().handle);
     var stdout_buffer: [4096]u8 = undefined;
-    var out_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
+    var out_writer = std.Io.File.stdout().writer(self.io, &stdout_buffer);
     try HelpRenderer.render(&out_writer.interface, command, profile);
     try out_writer.interface.flush();
 }
 
 /// Prints a styled error and optional hint to stderr.
 pub fn printError(self: *App, message: []const u8, hint: ?[]const u8) !void {
-    _ = self;
-    const io = currentIo();
+    prepareConsole();
     const profile = carnaval.colorProfileForHandle(std.Io.File.stderr().handle);
     var stderr_buffer: [4096]u8 = undefined;
-    var err_writer = std.Io.File.stderr().writer(io, &stderr_buffer);
+    var err_writer = std.Io.File.stderr().writer(self.io, &stderr_buffer);
     try carnaval.Style.init().fg(.{ .ansi16 = .red }).renderWithProfile("error:", &err_writer.interface, profile);
     try err_writer.interface.print(" {s}\n", .{message});
     if (hint) |h| {
@@ -241,6 +271,7 @@ fn runHooks(self: *App, ctx: *ParseContext) !void {
 /// - `main@abc1234`         — git info only (no version set)
 /// - nothing                — no version and no git info
 fn printVersion(self: *App) !void {
+    prepareConsole();
     const version = self.root().version;
     const has_commit = self.commit.len > 0;
     const has_branch = self.branch.len > 0;
@@ -249,7 +280,7 @@ fn printVersion(self: *App) !void {
     if (version == null and !has_git) return;
 
     var stdout_buffer: [512]u8 = undefined;
-    var out_writer = std.Io.File.stdout().writer(&stdout_buffer);
+    var out_writer = std.Io.File.stdout().writer(self.io, &stdout_buffer);
 
     if (version) |v| {
         if (has_git) {
@@ -284,9 +315,8 @@ fn ensureCompletionCommand(self: *App) !void {
     self.completion_registered = true;
 }
 
-fn currentIo() std.Io {
-    return if (builtin.is_test)
-        std.testing.io
-    else
-        std.Io.Threaded.global_single_threaded.io();
+fn prepareConsole() void {
+    carnaval.prepareWindowsConsoleIfNeeded(std.Io.File.stdout().handle);
+    carnaval.prepareWindowsConsoleIfNeeded(std.Io.File.stderr().handle);
 }
+

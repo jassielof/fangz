@@ -71,14 +71,12 @@ fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfi
 
     for (command.positionals.items) |arg| {
         var spec_buf: [128]u8 = undefined;
-        var sbs = std.io.fixedBufferStream(&spec_buf);
-        const sw = sbs.writer();
+        var sw: std.Io.Writer = .fixed(&spec_buf);
         try sw.print("<{s}>", .{arg.name});
         if (arg.variadic) try sw.print("...", .{});
 
         var desc_buf: [256]u8 = undefined;
-        var dbs = std.io.fixedBufferStream(&desc_buf);
-        const dw = dbs.writer();
+        var dw: std.Io.Writer = .fixed(&desc_buf);
         if (arg.description.len > 0) try dw.print("{s}", .{arg.description});
         if (arg.required) try dw.print(" [required]", .{});
         if (arg.variadic) try dw.print(" [variadic]", .{});
@@ -87,8 +85,8 @@ fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfi
             writer,
             profile,
             "  ",
-            spec_buf[0..sbs.pos],
-            desc_buf[0..dbs.pos],
+            spec_buf[0..sw.end],
+            desc_buf[0..dw.end],
             spec_width,
             terminal_width,
             command.allocator,
@@ -244,8 +242,7 @@ fn renderOneFlag(
     }
 
     var desc_buf: [256]u8 = undefined;
-    var fbs = std.io.fixedBufferStream(&desc_buf);
-    const d = fbs.writer();
+    var d: std.Io.Writer = .fixed(&desc_buf);
     try d.print("{s}", .{flag.description});
     if (flag.required) try d.print(" [required]", .{});
     if (flag.default_value) |dv| {
@@ -268,7 +265,7 @@ fn renderOneFlag(
     }
     if (is_global) try d.print(" [global]", .{});
 
-    try printAlignedOptionRow(writer, profile, spec_buf[0..spec_len], desc_buf[0..fbs.pos], spec_width, terminal_width, allocator);
+    try printAlignedOptionRow(writer, profile, spec_buf[0..spec_len], desc_buf[0..d.end], spec_width, terminal_width, allocator);
 }
 
 /// Computes display width of an option specification string.
