@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const git = @import("git.build.zig");
+
 pub fn build(b: *std.Build) void {
     const mod_name = "fangz";
 
@@ -106,8 +108,8 @@ pub fn injectMeta(
     const options = b.addOptions();
     options.addOption([]const u8, "name", compile.name);
     options.addOption([]const u8, "version", extractVersion(b) orelse "");
-    options.addOption([]const u8, "commit", extractGitCommit(b));
-    options.addOption([]const u8, "branch", extractGitBranch(b));
+    options.addOption([]const u8, "commit", git.extractCommit(b));
+    options.addOption([]const u8, "branch", git.extractBranch(b));
     // Overwrite the default fangz_meta that fangz's own build() set up.
     fangz_mod.addOptions("fangz_meta", options);
 }
@@ -128,57 +130,4 @@ fn extractVersion(b: *std.Build) ?[]const u8 {
     const after = content[start + marker.len ..];
     const end = std.mem.findScalar(u8, after, '"') orelse return null;
     return b.dupe(after[0..end]);
-}
-
-fn extractGitCommit(b: *std.Build) []const u8 {
-    const result = std.process.run(b.allocator, b.graph.io, .{
-        .argv = &.{ "git", "rev-parse", "--short", "HEAD" },
-        .cwd = .inherit,
-    }) catch return "";
-    defer {
-        b.allocator.free(result.stdout);
-        b.allocator.free(result.stderr);
-    }
-    if (result.term != .exited or result.term.exited != 0) return "";
-    const trimmed = std.mem.trim(u8, result.stdout, " \n\r\t");
-    return if (trimmed.len > 0) b.dupe(trimmed) else "";
-}
-
-fn extractGitBranch(b: *std.Build) []const u8 {
-    const result = std.process.run(
-        b.allocator,
-        b.graph.io,
-        .{
-            .argv = &.{ "git", "rev-parse", "--abbrev-ref", "HEAD" },
-            .cwd = .inherit,
-        },
-    ) catch return "";
-    defer {
-        b.allocator.free(result.stdout);
-        b.allocator.free(result.stderr);
-    }
-    if (result.term != .exited or result.term.exited != 0) return "";
-    const trimmed = std.mem.trim(u8, result.stdout, " \n\r\t");
-    if (trimmed.len > 0 and !std.mem.eql(u8, trimmed, "HEAD")) {
-        return b.dupe(trimmed);
-    }
-
-    // Detached HEAD: read refs/heads (shared with the bare repo via the worktree).
-    // In a bare clone zigit worktree, refs/heads/main is always present.
-    const refs = std.process.run(b.allocator, b.graph.io, .{
-        .argv = &.{ "git", "for-each-ref", "--format=%(refname:short)", "refs/heads" },
-        .cwd = .inherit,
-    },) catch return "";
-    defer {
-        b.allocator.free(refs.stdout);
-        b.allocator.free(refs.stderr);
-    }
-    if (refs.term != .exited or refs.term.exited != 0) return "";
-    const refs_trim = std.mem.trim(u8, refs.stdout, " \n\r\t");
-    if (refs_trim.len > 0) {
-        const newline = std.mem.findScalar(u8, refs_trim, '\n') orelse refs_trim.len;
-        const first = std.mem.trim(u8, refs_trim[0..newline], " \r\t");
-        if (first.len > 0) return b.dupe(first);
-    }
-    return "";
 }
