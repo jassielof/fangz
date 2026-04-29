@@ -7,12 +7,16 @@
         .carnaval = .{
             .path = "modules/carnaval",
         },
+        .trama = .{
+            .path = "modules/trama",
+        },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "git.build.zig",
         "src",
+        "modules/trama",
         "LICENSE.txt",
         "README.md",
     },
