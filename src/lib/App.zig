@@ -25,6 +25,8 @@ last_context: ?ParseContext = null,
 owned_process_args: std.ArrayList([]const u8) = .empty,
 completions_enabled: bool = true,
 completion_registered: bool = false,
+docs_enabled: bool = true,
+docs_registered: bool = false,
 commit: []const u8 = "",
 branch: []const u8 = "",
 
@@ -90,8 +92,14 @@ pub fn setCompletionsEnabled(self: *App, enabled: bool) void {
     self.completions_enabled = enabled;
 }
 
+/// Enables or disables the built-in docs command registration.
+pub fn setDocsEnabled(self: *App, enabled: bool) void {
+    self.docs_enabled = enabled;
+}
+
 /// Parses explicit argv tokens and returns the active parse context.
 pub fn parseFrom(self: *App, argv: []const []const u8) FangzError!*ParseContext {
+    try self.ensureDocsCommand();
     try self.ensureCompletionCommand();
     try self.root_command.freeze();
     if (self.last_context) |*ctx| ctx.deinit();
@@ -105,6 +113,7 @@ pub fn parseFrom(self: *App, argv: []const []const u8) FangzError!*ParseContext 
 
 /// Parses the current process argv and returns the parse context.
 pub fn parseProcess(self: *App, process_args: std.process.Args) FangzError!*ParseContext {
+    try self.ensureDocsCommand();
     try self.ensureCompletionCommand();
     try self.root_command.freeze();
     if (self.last_context) |*ctx| ctx.deinit();
@@ -119,6 +128,7 @@ pub fn parseProcess(self: *App, process_args: std.process.Args) FangzError!*Pars
 
 /// Parses and executes command hooks for explicit argv input.
 pub fn executeFrom(self: *App, argv: []const []const u8) anyerror!void {
+    try self.ensureDocsCommand();
     try self.ensureCompletionCommand();
     try self.root_command.freeze();
 
@@ -163,6 +173,10 @@ pub fn executeFrom(self: *App, argv: []const []const u8) anyerror!void {
         try self.printHelp(ctx.command);
         return;
     }
+    if (ctx.short_help_requested) {
+        try self.printShortHelp(ctx.command);
+        return;
+    }
     if (ctx.version_requested) {
         try self.printVersion();
         return;
@@ -205,9 +219,9 @@ fn freeOwnedProcessArgs(self: *App) void {
     self.owned_process_args = .empty;
 }
 
-/// Generates markdown docs for the current command tree.
-pub fn generateMarkdownDocs(self: *App, options: DocGenerator.Options) !void {
-    try DocGenerator.generateMarkdownDocs(self.allocator, self.io, self.root(), options);
+/// Generates AsciiDoc documentation for the current command tree.
+pub fn generateDocs(self: *App, options: DocGenerator.Options) !void {
+    try DocGenerator.generateDocs(self.allocator, self.io, self.root(), options);
 }
 
 /// Generates a shell completion script to the provided writer.
@@ -217,13 +231,23 @@ pub fn generateCompletions(self: *App, shell: Completion.Shell, writer: anytype)
     try Completion.generateCompletions(&self.root_command, shell, writer);
 }
 
-/// Renders help text for the given command to stdout.
+/// Renders full help text (`--help`) for the given command to stdout.
 pub fn printHelp(self: *App, command: *const Command) !void {
     prepareConsole();
     const profile = carnaval.colorProfileForHandle(std.Io.File.stdout().handle);
     var stdout_buffer: [4096]u8 = undefined;
     var out_writer = std.Io.File.stdout().writer(self.io, &stdout_buffer);
-    try HelpRenderer.render(&out_writer.interface, command, profile);
+    try HelpRenderer.render(&out_writer.interface, command, profile, .full);
+    try out_writer.interface.flush();
+}
+
+/// Renders compact help text (`-h`) for the given command to stdout.
+pub fn printShortHelp(self: *App, command: *const Command) !void {
+    prepareConsole();
+    const profile = carnaval.colorProfileForHandle(std.Io.File.stdout().handle);
+    var stdout_buffer: [4096]u8 = undefined;
+    var out_writer = std.Io.File.stdout().writer(self.io, &stdout_buffer);
+    try HelpRenderer.render(&out_writer.interface, command, profile, .short);
     try out_writer.interface.flush();
 }
 
@@ -313,6 +337,14 @@ fn ensureCompletionCommand(self: *App) !void {
     if (self.completion_registered) return;
     try Completion.registerCompletionCommand(self.root());
     self.completion_registered = true;
+}
+
+/// Lazily registers the built-in docs command when enabled.
+fn ensureDocsCommand(self: *App) !void {
+    if (!self.docs_enabled) return;
+    if (self.docs_registered) return;
+    try DocGenerator.registerDocsCommand(self.root());
+    self.docs_registered = true;
 }
 
 fn prepareConsole() void {

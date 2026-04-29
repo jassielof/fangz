@@ -1,9 +1,15 @@
-//! Markdown documentation generator for Fangz command trees.
+//! AsciiDoc documentation generator for Fangz command trees.
 //!
-//! Supports self-contained single-file output and per-command directory output.
+//! Generates AsciiDoc (`.adoc`) files suitable for processing with
+//! `asciidoctor` or Pandoc.  Two layout modes are supported: a single
+//! self-contained file and one file per command organised in subdirectories.
+//!
+//! The `docs` subcommand is auto-injected into every `App` via
+//! `registerDocsCommand` / `App.ensureDocsCommand`.
 
 const std = @import("std");
 const Command = @import("Command.zig");
+const ParseContext = @import("ParseContext.zig");
 
 const ListWriter = struct {
     allocator: std.mem.Allocator,
@@ -16,41 +22,41 @@ const ListWriter = struct {
     }
 };
 
-/// Modes for generation the documentation.
+/// Layout modes for documentation generation.
 pub const Mode = enum {
-    /// Generate a single markdown file containing the entire command hierarchy.
+    /// One self-contained file containing the full command hierarchy.
     single_file,
-    /// Generate separate markdown files for each command, organized in directories.
+    /// One file per command, organised in subdirectories.
     per_command,
 };
 
-/// Options for documentation generation.
+/// Options for AsciiDoc documentation generation.
 pub const Options = struct {
-    /// The generation mode to use.
+    /// Layout mode.
     mode: Mode = .single_file,
-    /// The output directory where documentation files will be written.
+    /// Output directory.
     output_dir: []const u8 = "docs",
-    /// The file name to use when generating a single markdown file.
-    single_file_name: []const u8 = "cli.md",
-    /// Whether to include hidden commands in the generated documentation.
+    /// File name for `.single_file` mode.
+    single_file_name: []const u8 = "cli.adoc",
+    /// When true, hidden commands are included.
     include_hidden: bool = false,
-    /// Whether to overwrite existing files in the output directory.
+    /// When true, existing files are overwritten.
     overwrite: bool = true,
 };
 
-/// Generates markdown documentation for the given command hierarchy based on the provided options.
-pub fn generateMarkdownDocs(
+/// Generates AsciiDoc documentation for the given command hierarchy.
+pub fn generateDocs(
     allocator: std.mem.Allocator,
     io: std.Io,
     root: *const Command,
     options: Options,
 ) !void {
-    _ = options.include_hidden; // Reserved for future hidden-command support.
+    _ = options.include_hidden;
     try std.Io.Dir.cwd().createDirPath(io, options.output_dir);
 
     switch (options.mode) {
         .single_file => {
-            const doc = try renderSingleFileMarkdown(allocator, root);
+            const doc = try renderSingleFile(allocator, root);
             defer allocator.free(doc);
 
             const output_path = try std.fs.path.join(allocator, &.{ options.output_dir, options.single_file_name });
@@ -63,37 +69,36 @@ pub fn generateMarkdownDocs(
     }
 }
 
-/// Renders all commands recursively into one markdown document.
-fn renderSingleFileMarkdown(allocator: std.mem.Allocator, root: *const Command) ![]u8 {
+// ── Single-file layout ────────────────────────────────────────────────────
+
+fn renderSingleFile(allocator: std.mem.Allocator, root: *const Command) ![]u8 {
     var out = try std.ArrayList(u8).initCapacity(allocator, 4096);
     errdefer out.deinit(allocator);
-
-    try appendCommandDocRecursive(allocator, &out, root, true);
+    try appendRecursive(allocator, &out, root, 1, true);
     return out.toOwnedSlice(allocator);
 }
 
-/// Appends a command section and subcommand sections recursively.
-fn appendCommandDocRecursive(
+fn appendRecursive(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     cmd: *const Command,
+    depth: u8,
     is_first: bool,
 ) !void {
     var w = ListWriter{ .allocator = allocator, .list = out };
-    if (!is_first) {
-        try w.print("\n---\n\n", .{});
-    }
+    if (!is_first) try w.print("\n'''\n\n", .{});
 
-    const section = try renderCommandMarkdown(allocator, cmd, false);
+    const section = try renderCommand(allocator, cmd, false, depth);
     defer allocator.free(section);
     try w.print("{s}", .{section});
 
     for (cmd.subcommands.items) |sub| {
-        try appendCommandDocRecursive(allocator, out, sub, false);
+        try appendRecursive(allocator, out, sub, depth + 1, false);
     }
 }
 
-/// Writes command docs as one file per command directory.
+// ── Per-command layout ────────────────────────────────────────────────────
+
 fn writePerCommand(
     io: std.Io,
     allocator: std.mem.Allocator,
@@ -103,10 +108,10 @@ fn writePerCommand(
 ) !void {
     try std.Io.Dir.cwd().createDirPath(io, dir_path);
 
-    const body = try renderCommandMarkdown(allocator, cmd, true);
+    const body = try renderCommand(allocator, cmd, true, 1);
     defer allocator.free(body);
 
-    const file_path = try std.fs.path.join(allocator, &.{ dir_path, "index.md" });
+    const file_path = try std.fs.path.join(allocator, &.{ dir_path, "index.adoc" });
     defer allocator.free(file_path);
     try writeFile(io, file_path, body, overwrite);
 
@@ -119,25 +124,13 @@ fn writePerCommand(
     }
 }
 
-/// Writes one file with overwrite semantics.
-fn writeFile(io: std.Io, path: []const u8, content: []const u8, overwrite: bool) !void {
-    if (std.fs.path.dirname(path)) |parent| {
-        if (parent.len > 0) try std.Io.Dir.cwd().createDirPath(io, parent);
-    }
+// ── Command renderer ──────────────────────────────────────────────────────
 
-    const file = try std.Io.Dir.cwd().createFile(io, path, .{
-        .truncate = overwrite,
-        .exclusive = !overwrite,
-    });
-    defer file.close(io);
-    try file.writeStreamingAll(io, content);
-}
-
-/// Renders one command markdown document section.
-fn renderCommandMarkdown(
+fn renderCommand(
     allocator: std.mem.Allocator,
     cmd: *const Command,
     include_links: bool,
+    depth: u8,
 ) ![]u8 {
     var out = try std.ArrayList(u8).initCapacity(allocator, 2048);
     errdefer out.deinit(allocator);
@@ -146,17 +139,20 @@ fn renderCommandMarkdown(
     const path_name = try commandPath(allocator, cmd);
     defer allocator.free(path_name);
 
-    try w.print("# `{s}`\n\n", .{path_name});
-    if (cmd.description.len > 0) {
-        try w.print("{s}\n\n", .{cmd.description});
-    }
+    // Section heading: depth × '=' then ` \`name\``
+    var i: u8 = 0;
+    while (i < depth) : (i += 1) try w.print("=", .{});
+    try w.print(" `{s}`\n\n", .{path_name});
+
+    if (cmd.description.len > 0) try w.print("{s}\n\n", .{cmd.description});
+    if (cmd.long_description.len > 0) try w.print("{s}\n\n", .{cmd.long_description});
 
     if (include_links and cmd.parent != null) {
-        try w.print("> Parent: `{s}`\n\n", .{cmd.parent.?.name});
+        try w.print("_Parent: `{s}`_\n\n", .{cmd.parent.?.name});
     }
 
-    try w.print("## Usage\n\n", .{});
-    try w.print("`{s}", .{path_name});
+    // Usage block
+    try w.print("== Usage\n\n----\n{s}", .{path_name});
     if (cmd.hasAnyOptions()) try w.print(" [OPTIONS]", .{});
     if (cmd.subcommands.items.len > 0) try w.print(" <COMMAND>", .{});
     for (cmd.positionals.items) |pos| {
@@ -168,68 +164,58 @@ fn renderCommandMarkdown(
             try w.print(" [{s}]", .{pos.name});
         }
     }
-    try w.print("`\n\n", .{});
+    try w.print("\n----\n\n", .{});
 
-    if (cmd.aliases.items.len > 0) {
-        try w.print("## Aliases\n\n", .{});
-        for (cmd.aliases.items) |alias| {
-            try w.print("- `{s}`\n", .{alias});
-        }
-        try w.print("\n", .{});
-    }
-
-    if (cmd.version) |version| {
-        try w.print("## Version\n\n`{s}`\n\n", .{version});
-    }
-
+    // Arguments
     if (cmd.positionals.items.len > 0) {
-        try w.print("## Arguments\n\n", .{});
-        try w.print("| Name | Required | Variadic | Description |\n", .{});
-        try w.print("|---|---|---|---|\n", .{});
+        try w.print("== Arguments\n\n", .{});
         for (cmd.positionals.items) |pos| {
-            try w.print("| `{s}` | {s} | {s} | {s} |\n", .{
-                pos.name,
-                yesNo(pos.required),
-                yesNo(pos.variadic),
-                pos.description,
-            });
+            try w.print("`<{s}>`", .{pos.name});
+            if (pos.variadic) try w.print("...", .{});
+            try w.print("::\n", .{});
+            if (pos.description.len > 0) try w.print("{s}", .{pos.description});
+            if (pos.required) try w.print(" [required]", .{});
+            if (pos.variadic) try w.print(" [variadic]", .{});
+            if (pos.allowed_values) |vals| {
+                try w.print(" +\n[possible values: ", .{});
+                for (vals, 0..) |v, j| {
+                    if (j != 0) try w.print(", ", .{});
+                    try w.print("{s}", .{v});
+                }
+                try w.print("]", .{});
+            }
+            try w.print("\n\n", .{});
         }
-        try w.print("\n", .{});
     }
 
-    try w.print("## Options\n\n", .{});
-    try w.print("| Flag | Type | Required | Default | Scope | Description |\n", .{});
-    try w.print("|---|---|---|---|---|---|\n", .{});
-    try appendOptionsTable(allocator, cmd, w);
-    try w.print("| `-h, --help` | `bool` | no | - | local | Print help |\n", .{});
-    if (cmd.parent == null and cmd.rootConst().version != null) {
-        try w.print("| `-V, --version` | `bool` | no | - | local | Print version |\n", .{});
-    }
-    try w.print("\n", .{});
-
+    // Subcommands
     if (cmd.subcommands.items.len > 0) {
-        try w.print("## Commands\n\n", .{});
+        try w.print("== Commands\n\n", .{});
         for (cmd.subcommands.items) |sub| {
             if (include_links) {
                 const slug = try slugify(allocator, sub.name);
                 defer allocator.free(slug);
-                try w.print("- [`{s}`]({s}/index.md): {s}\n", .{
-                    sub.name,
-                    slug,
-                    sub.description,
-                });
+                try w.print("link:{s}/index.adoc[`{s}`]::\n{s}\n\n", .{ slug, sub.name, sub.description });
             } else {
-                try w.print("- `{s}`: {s}\n", .{ sub.name, sub.description });
+                try w.print("`{s}`::\n{s}\n\n", .{ sub.name, sub.description });
             }
         }
-        try w.print("- `help`: Print this message or help of subcommands\n\n", .{});
+        try w.print("`help`::\nPrint this message or help of the given subcommand(s)\n\n", .{});
+    }
+
+    // Options
+    try w.print("== Options\n\n", .{});
+    try appendOptions(allocator, cmd, w);
+    try w.print("`-h, --help`::\nPrint help.\n\n", .{});
+    if (cmd.parent == null and cmd.rootConst().version != null) {
+        try w.print("`-V, --version`::\nPrint version.\n\n", .{});
     }
 
     return out.toOwnedSlice(allocator);
 }
 
-/// Appends options table rows for local and inherited persistent flags.
-fn appendOptionsTable(allocator: std.mem.Allocator, cmd: *const Command, w: anytype) !void {
+/// Appends AsciiDoc definition-list entries for all visible flags.
+fn appendOptions(allocator: std.mem.Allocator, cmd: *const Command, w: anytype) !void {
     var chain = try cmd.collectAncestorPath(allocator);
     defer chain.deinit(allocator);
 
@@ -237,54 +223,110 @@ fn appendOptionsTable(allocator: std.mem.Allocator, cmd: *const Command, w: anyt
         for (ancestor.flags.constSlice()) |flag| {
             if (ancestor != cmd and !flag.persistent) continue;
 
-            const spec = try flagSpec(allocator, flag);
+            const spec = try buildFlagSpec(allocator, flag);
             defer allocator.free(spec);
-            const typ = if (flag.value_type == .bool) "bool" else switch (flag.value_type) {
-                .string => "string",
-                .int => "int",
-                .float => "float",
-                .string_list => "string[]",
-                .key_value_list => "key=value[]",
-                .enum_tag => "enum",
-                .bool => unreachable,
-            };
-            const def = defaultText(flag);
-            const scope = if (ancestor == cmd) "local" else "global";
-            const desc = try optionDescription(allocator, flag);
-            defer allocator.free(desc);
 
-            try w.print("| `{s}` | `{s}` | {s} | `{s}` | {s} | {s} |\n", .{
-                spec,
-                typ,
-                yesNo(flag.required),
-                def,
-                scope,
-                desc,
-            });
+            var desc = try std.ArrayList(u8).initCapacity(allocator, 128);
+            defer desc.deinit(allocator);
+            var dw = ListWriter{ .allocator = allocator, .list = &desc };
+
+            try dw.print("{s}", .{flag.description});
+            if (flag.long_description.len > 0) try dw.print(" {s}", .{flag.long_description});
+            if (flag.required) try dw.print(" [required]", .{});
+            if (flag.default_value) |dv| {
+                switch (dv) {
+                    .bool => |v| try dw.print(" [default: {s}]", .{if (v) "true" else "false"}),
+                    .string => |v| try dw.print(" [default: {s}]", .{v}),
+                    .int => |v| try dw.print(" [default: {}]", .{v}),
+                    .float => |v| try dw.print(" [default: {d}]", .{v}),
+                    .enum_tag => |ord| try dw.print(" [default: {s}]", .{resolveEnumTagName(flag, ord)}),
+                    .string_list => try dw.print(" [default: set]", .{}),
+                }
+            }
+            if (flag.allowed_values) |vals| {
+                try dw.print(" [possible values: ", .{});
+                for (vals, 0..) |v, j| {
+                    if (j != 0) try dw.print(", ", .{});
+                    try dw.print("{s}", .{v});
+                }
+                try dw.print("]", .{});
+            }
+            if (ancestor != cmd) try dw.print(" [global]", .{});
+
+            try w.print("`{s}`::\n{s}\n\n", .{ spec, desc.items });
         }
     }
 }
 
-/// Builds one human-readable option description string.
-fn optionDescription(allocator: std.mem.Allocator, flag: Command.Flag) ![]u8 {
-    var out = try std.ArrayList(u8).initCapacity(allocator, 128);
-    errdefer out.deinit(allocator);
-    var w = ListWriter{ .allocator = allocator, .list = &out };
+// ── Built-in docs subcommand ──────────────────────────────────────────────
 
-    try w.print("{s}", .{flag.description});
-    if (flag.allowed_values) |values| {
-        try w.print(" (possible values: ", .{});
-        for (values, 0..) |v, i| {
-            if (i != 0) try w.print(", ", .{});
-            try w.print("{s}", .{v});
-        }
-        try w.print(")", .{});
-    }
-    return out.toOwnedSlice(allocator);
+/// Registers the built-in `docs` subcommand on root.
+///
+/// Generates AsciiDoc documentation for the application's full command tree.
+/// Called automatically by `App.ensureDocsCommand` — applications do not need
+/// to call this directly.
+pub fn registerDocsCommand(root: *Command) !void {
+    if (root.findSubcommand("docs") != null) return;
+
+    const docs = try root.addSubcommand(.{
+        .name = "docs",
+        .description = "Generate AsciiDoc documentation for this CLI",
+    });
+    try docs.addFlag([]const u8, .{
+        .name = "output-dir",
+        .description = "Directory where AsciiDoc documentation is written.",
+        .default = "docs",
+    });
+    try docs.addFlag([]const u8, .{
+        .name = "mode",
+        .description = "AsciiDoc layout to generate.",
+        .default = "single_file",
+        .allowed_values = &.{ "single_file", "per_command" },
+    });
+    try docs.addFlag([]const u8, .{
+        .name = "file",
+        .description = "File name to use with --mode single_file.",
+        .default = "cli.adoc",
+    });
+    docs.setHooks(.{ .run = runDocsCommand });
 }
 
-/// Builds display spec text for a single flag.
-fn flagSpec(allocator: std.mem.Allocator, flag: Command.Flag) ![]u8 {
+fn runDocsCommand(ctx: *ParseContext) !void {
+    const output_dir = ctx.stringFlag("output-dir") orelse "docs";
+    const mode_str = ctx.stringFlag("mode") orelse "single_file";
+    const file = ctx.stringFlag("file") orelse "cli.adoc";
+
+    const mode: Mode = if (std.mem.eql(u8, mode_str, "per_command")) .per_command else .single_file;
+
+    try generateDocs(ctx.allocator, ctx.io, ctx.command.root(), .{
+        .mode = mode,
+        .output_dir = output_dir,
+        .single_file_name = file,
+    });
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────
+
+fn writeFile(io: std.Io, path: []const u8, content: []const u8, overwrite: bool) !void {
+    if (std.fs.path.dirname(path)) |parent| {
+        if (parent.len > 0) try std.Io.Dir.cwd().createDirPath(io, parent);
+    }
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{
+        .truncate = overwrite,
+        .exclusive = !overwrite,
+    });
+    defer file.close(io);
+    try file.writeStreamingAll(io, content);
+}
+
+/// Builds the display spec string for a flag (e.g. `-m, --message <STRING>`).
+fn buildFlagSpec(allocator: std.mem.Allocator, flag: Command.Flag) ![]u8 {
+    if (flag.negatable and flag.value_type == .bool) {
+        if (flag.short) |short| {
+            return std.fmt.allocPrint(allocator, "-{c}, --[no-]{s}", .{ short, flag.name });
+        }
+        return std.fmt.allocPrint(allocator, "--[no-]{s}", .{flag.name});
+    }
     if (flag.short) |short| {
         if (flag.value_type == .bool) {
             return std.fmt.allocPrint(allocator, "-{c}, --{s}", .{ short, flag.name });
@@ -295,7 +337,6 @@ fn flagSpec(allocator: std.mem.Allocator, flag: Command.Flag) ![]u8 {
             if (flag.value_hint) |hint| hint else typeToken(flag.value_type),
         });
     }
-
     if (flag.value_type == .bool) {
         return std.fmt.allocPrint(allocator, "--{s}", .{flag.name});
     }
@@ -305,7 +346,6 @@ fn flagSpec(allocator: std.mem.Allocator, flag: Command.Flag) ![]u8 {
     });
 }
 
-/// Returns uppercase display token for value types.
 fn typeToken(flag_type: Command.FlagType) []const u8 {
     return switch (flag_type) {
         .string, .string_list => "STRING",
@@ -313,35 +353,20 @@ fn typeToken(flag_type: Command.FlagType) []const u8 {
         .enum_tag => "VALUE",
         .int => "INT",
         .float => "FLOAT",
-        .bool => "BOOL",
+        .bool => "",
     };
 }
 
-/// Returns display text for default values in docs.
-///
-/// For `enum_tag` flags the actual variant name is looked up from the flag's
-/// `allowed_values` / `enum_values` tables, matching the behaviour of the
-/// help renderer.
-fn defaultText(flag: Command.Flag) []const u8 {
-    const default_value = flag.default_value orelse return "-";
-    return switch (default_value) {
-        .bool => |v| if (v) "true" else "false",
-        .string => |v| v,
-        .int => "set",
-        .float => "set",
-        .enum_tag => |ordinal| blk: {
-            const names = flag.allowed_values orelse break :blk "set";
-            const ords = flag.enum_values orelse break :blk "set";
-            for (ords, 0..) |ord, i| {
-                if (ord == ordinal and i < names.len) break :blk names[i];
-            }
-            break :blk "set";
-        },
-        .string_list => "set",
-    };
+/// Resolves the display name of an enum_tag ordinal from the flag descriptor.
+fn resolveEnumTagName(flag: Command.Flag, ordinal: u32) []const u8 {
+    const names = flag.allowed_values orelse return "set";
+    const ords = flag.enum_values orelse return "set";
+    for (ords, 0..) |ord, i| {
+        if (ord == ordinal and i < names.len) return names[i];
+    }
+    return "set";
 }
 
-/// Builds fully-qualified command path text from ancestry.
 fn commandPath(allocator: std.mem.Allocator, cmd: *const Command) ![]u8 {
     var chain = try cmd.collectAncestorPath(allocator);
     defer chain.deinit(allocator);
@@ -349,14 +374,13 @@ fn commandPath(allocator: std.mem.Allocator, cmd: *const Command) ![]u8 {
     var out = try std.ArrayList(u8).initCapacity(allocator, 64);
     errdefer out.deinit(allocator);
     var w = ListWriter{ .allocator = allocator, .list = &out };
-    for (chain.items, 0..) |node, i| {
-        if (i != 0) try w.print(" ", .{});
+    for (chain.items, 0..) |node, j| {
+        if (j != 0) try w.print(" ", .{});
         try w.print("{s}", .{node.name});
     }
     return out.toOwnedSlice(allocator);
 }
 
-/// Converts command name to a file-system-safe slug.
 fn slugify(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
     var out = try std.ArrayList(u8).initCapacity(allocator, name.len);
     errdefer out.deinit(allocator);
@@ -368,9 +392,4 @@ fn slugify(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
         }
     }
     return out.toOwnedSlice(allocator);
-}
-
-/// Converts bool to `yes` or `no` table text.
-fn yesNo(value: bool) []const u8 {
-    return if (value) "yes" else "no";
 }

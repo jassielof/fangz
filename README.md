@@ -150,7 +150,27 @@ Options:
 
 Should be fixed and tested:
 
-- First, it should be "completions", I believe, not singular "completion", as 
+- First, it should be "completions", I believe, not singular "completion", as it generates the completion scripts or suggestions for the given shell. But I'm not sure, as I want to be good UX.
+- The compeltions command, keeps showing "documentation linter..." in its help, shouldn't it be showing like in the docs command?
+- OH, no I typed, `completions` and it still threw me normal, i guess it should allow for both completion/s, normally but show idk whichever sounds, reads and feels better.
+
+```txt
+zig build cli -- completion
+completion
+Generate shell completion scripts
+
+Usage: completion [OPTIONS] <shell>
+
+Arguments:
+  <shell>  One of: bash, zsh, fish, pwsh, sh, nu, nushell [required]
+
+Options:
+  --dynamic   For Nushell, emit dynamic completer module (default: static) [default: false]
+  -h, --help  Print help
+
+```
+
+The list of shells should be using my carnaval list styling, not just a comma-separated list, as it'll look prettier.
 
 ## Documentation generation
 
@@ -176,11 +196,13 @@ The description is inferred from a `.description` field in `build.zig.zon` if pr
 
 ## Shell completions
 
-Fangz injects a `completion` subcommand into every application. Supported shells are Bash, Zsh, Fish, PowerShell, sh, and Nushell. Nushell supports both a static completion list and a dynamic completer module via a `--dynamic` flag on the completion subcommand.
+Fangz injects a `completion` subcommand into every application. Supported shells are Bash, Zsh, Fish, PowerShell, and Nushell. Nushell supports both a static completion list and a dynamic completer module via a `--dynamic` flag on the completion subcommand.
 
 Priority is given to shells that see active use during development. Nushell is the current primary. Additional shells beyond this list are not planned for first-party support and are open to contributions.
 
 > **Known issue:** Nushell's completion engine produces a syntax error on kebab-cased flag names in some completion contexts. Under investigation.
+
+As well, seems that the dynamic flag in the completions is useless, as static and dynamic are complementary, the library should do best effort to generate automatically by default if the user uses dynamic-needed features.
 
 ## Credits
 

@@ -90,7 +90,7 @@ pub fn parse(allocator: std.mem.Allocator, io: std.Io, root: *Command, argv: []c
         }
     }
 
-    if (ctx.help_requested or ctx.version_requested) {
+    if (ctx.help_requested or ctx.short_help_requested or ctx.version_requested) {
         return .{ .context = ctx };
     }
 
@@ -154,6 +154,18 @@ fn parseLongFlag(
         return;
     }
 
+    // Handle --no-<name> for negatable boolean flags.
+    if (std.mem.startsWith(u8, body, "no-")) {
+        const neg_name = body[3..];
+        if (command.resolveFlagByName(neg_name)) |lookup| {
+            const flag = lookup.command.flags.constSlice()[lookup.index];
+            if (flag.negatable and flag.value_type == .bool) {
+                try setFlagValue(allocator, ctx, flag, .{ .bool = false });
+                return;
+            }
+        }
+    }
+
     var name = body;
     var attached_value: ?[]const u8 = null;
     if (std.mem.indexOfScalar(u8, body, '=')) |eq| {
@@ -185,7 +197,7 @@ fn parseShortBundle(
     while (i < flags_part.len) : (i += 1) {
         const ch = flags_part[i];
         if (ch == 'h') {
-            ctx.help_requested = true;
+            ctx.short_help_requested = true;
             continue;
         }
         if (ch == 'V') {

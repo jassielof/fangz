@@ -68,10 +68,16 @@ pub const DefaultValue = union(enum) {
 pub const Flag = struct {
     name: []const u8,
     short: ?u8 = null,
+    /// One-line summary shown in both `-h` and `--help` output.
     description: []const u8 = "",
+    /// Extended description shown only in `--help` output.
+    long_description: []const u8 = "",
     value_type: FlagType = .bool,
     required: bool = false,
     persistent: bool = false,
+    /// When true, the flag also accepts a `--no-<name>` form that sets it false.
+    /// Only valid for boolean flags.
+    negatable: bool = false,
     default_value: ?DefaultValue = null,
     allowed_values: ?[]const []const u8 = null,
     enum_values: ?[]const u32 = null,
@@ -135,9 +141,14 @@ pub fn FlagOptions(comptime T: type) type {
     return struct {
         name: []const u8,
         short: ?u8 = null,
+        /// One-line summary shown in `-h` and `--help` output.
         description: []const u8 = "",
+        /// Extended description shown only in `--help` output.
+        long_description: []const u8 = "",
         required: bool = false,
         persistent: bool = false,
+        /// Accept `--no-<name>` form to set the flag false.  Only valid for bool flags.
+        negatable: bool = false,
         default: ?Base = null,
         multi: bool = false,
         value_hint: ?[]const u8 = null,
@@ -187,6 +198,8 @@ pub const Positional = struct {
     description: []const u8 = "",
     required: bool = false,
     variadic: bool = false,
+    /// Optional constrained value set shown as `[possible values: ...]` in help.
+    allowed_values: ?[]const []const u8 = null,
 };
 
 pub const Group = struct {
@@ -210,7 +223,10 @@ pub const Hooks = struct {
 
 pub const Init = struct {
     name: []const u8,
+    /// One-line summary shown in `-h` and `--help` output.
     description: []const u8 = "",
+    /// Extended description shown only in `--help` output.
+    long_description: []const u8 = "",
     version: ?[]const u8 = null,
     group_id: ?[]const u8 = null,
 };
@@ -218,7 +234,10 @@ pub const Init = struct {
 allocator: Allocator,
 parent: ?*Command = null,
 name: []const u8,
+/// One-line summary shown in `-h` and `--help` output.
 description: []const u8,
+/// Extended description shown only in `--help` output.
+long_description: []const u8,
 version: ?[]const u8,
 group_id: ?[]const u8,
 aliases: std.ArrayList([]const u8),
@@ -246,6 +265,7 @@ pub fn init(allocator: Allocator, cfg: Init) !Command {
         .allocator = allocator,
         .name = cfg.name,
         .description = cfg.description,
+        .long_description = cfg.long_description,
         .version = cfg.version,
         .group_id = cfg.group_id,
         .aliases = try std.ArrayList([]const u8).initCapacity(allocator, 2),
@@ -301,13 +321,17 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
         return error.InvalidFlagConfiguration;
     }
 
+    if (opts.negatable and value_type != .bool) return error.InvalidFlagConfiguration;
+
     var flag: Flag = .{
         .name = opts.name,
         .short = opts.short,
         .description = opts.description,
+        .long_description = opts.long_description,
         .value_type = value_type,
         .required = opts.required,
         .persistent = opts.persistent,
+        .negatable = opts.negatable,
         .allowed_keys = opts.allowed_keys,
         .value_hint = opts.value_hint,
     };

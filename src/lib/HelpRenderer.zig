@@ -7,12 +7,23 @@ const ColorProfile = carnaval.ColorProfile;
 
 const Command = @import("Command.zig");
 
+/// Controls the verbosity of the rendered help output.
+///
+/// - `.short` — compact output triggered by `-h`: synopsis, argument list, flag
+///              list with one-liner summaries only.
+/// - `.full`  — complete output triggered by `--help` or `help <cmd>`: same as
+///              short plus per-flag `long_description` and per-command `long_description`.
+pub const HelpMode = enum { short, full };
+
 /// Renders command help sections to the provided writer.
-pub fn render(writer: anytype, command: *const Command, profile: ColorProfile) !void {
+pub fn render(writer: anytype, command: *const Command, profile: ColorProfile, mode: HelpMode) !void {
     try carnaval.Style.init().bolded().renderWithProfile(command.name, writer, profile);
     try writer.print("\n", .{});
     if (command.description.len > 0) {
         try writer.print("{s}\n", .{command.description});
+    }
+    if (mode == .full and command.long_description.len > 0) {
+        try writer.print("\n{s}\n", .{command.long_description});
     }
     const terminal_width = carnaval.terminalWidthForHandle(std.Io.File.stdout().handle);
     try renderUsage(writer, command, profile);
@@ -28,13 +39,13 @@ pub fn render(writer: anytype, command: *const Command, profile: ColorProfile) !
         try writer.print("\n", .{});
         try carnaval.Style.init().bolded().renderWithProfile("Commands:", writer, profile);
         try writer.print("\n", .{});
-        try renderSubcommands(writer, command, profile, terminal_width);
+        try renderSubcommands(writer, command, profile, terminal_width, mode);
     }
 
     try writer.print("\n", .{});
     try carnaval.Style.init().bolded().renderWithProfile("Options:", writer, profile);
     try writer.print("\n", .{});
-    try renderFlags(writer, command, profile, terminal_width);
+    try renderFlags(writer, command, profile, terminal_width, mode);
 }
 
 /// Renders usage line for a command.
@@ -75,11 +86,19 @@ fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfi
         try sw.print("<{s}>", .{arg.name});
         if (arg.variadic) try sw.print("...", .{});
 
-        var desc_buf: [256]u8 = undefined;
+        var desc_buf: [512]u8 = undefined;
         var dw: std.Io.Writer = .fixed(&desc_buf);
         if (arg.description.len > 0) try dw.print("{s}", .{arg.description});
         if (arg.required) try dw.print(" [required]", .{});
         if (arg.variadic) try dw.print(" [variadic]", .{});
+        if (arg.allowed_values) |vals| {
+            try dw.print(" [possible values: ", .{});
+            for (vals, 0..) |v, i| {
+                if (i != 0) try dw.print(", ", .{});
+                try dw.print("{s}", .{v});
+            }
+            try dw.print("]", .{});
+        }
 
         try printAlignedCommandRow(
             writer,
@@ -95,7 +114,8 @@ fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfi
 }
 
 /// Renders grouped and ungrouped subcommand rows.
-fn renderSubcommands(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize) !void {
+fn renderSubcommands(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize, mode: HelpMode) !void {
+    _ = mode;
     var cmd_width: usize = "help".len;
     for (command.subcommands.items) |sub| {
         if (sub.name.len > cmd_width) cmd_width = sub.name.len;
@@ -146,7 +166,7 @@ fn renderSubcommands(writer: anytype, command: *const Command, profile: ColorPro
 }
 
 /// Renders command options including inherited persistent flags.
-fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize) !void {
+fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize, mode: HelpMode) !void {
     var spec_width: usize = 0;
     for (command.flags.constSlice()) |flag| {
         const len = optionSpecLen(flag);
@@ -171,7 +191,7 @@ fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, 
     }
 
     for (command.flags.constSlice()) |flag| {
-        try renderOneFlag(writer, flag, false, profile, spec_width, terminal_width, command.allocator);
+        try renderOneFlag(writer, flag, false, profile, spec_width, terminal_width, command.allocator, mode);
     }
 
     if (command.parent) |parent| {
@@ -180,7 +200,7 @@ fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, 
         for (chain.items) |ancestor| {
             for (ancestor.flags.constSlice()) |flag| {
                 if (!flag.persistent) continue;
-                try renderOneFlag(writer, flag, true, profile, spec_width, terminal_width, command.allocator);
+                try renderOneFlag(writer, flag, true, profile, spec_width, terminal_width, command.allocator, mode);
             }
         }
     }
@@ -200,6 +220,7 @@ fn renderOneFlag(
     spec_width: usize,
     terminal_width: usize,
     allocator: std.mem.Allocator,
+    mode: HelpMode,
 ) !void {
     var spec_buf: [128]u8 = undefined;
     var spec_len: usize = 0;
@@ -214,30 +235,39 @@ fn renderOneFlag(
         spec_buf[spec_len] = ' ';
         spec_len += 1;
     }
-    spec_buf[spec_len] = '-';
-    spec_len += 1;
-    spec_buf[spec_len] = '-';
-    spec_len += 1;
-    std.mem.copyForwards(u8, spec_buf[spec_len .. spec_len + flag.name.len], flag.name);
-    spec_len += flag.name.len;
+    // Negatable boolean flags are rendered as --[no-]<name>.
+    if (flag.negatable and flag.value_type == .bool) {
+        const prefix = "--[no-]";
+        std.mem.copyForwards(u8, spec_buf[spec_len .. spec_len + prefix.len], prefix);
+        spec_len += prefix.len;
+        std.mem.copyForwards(u8, spec_buf[spec_len .. spec_len + flag.name.len], flag.name);
+        spec_len += flag.name.len;
+    } else {
+        spec_buf[spec_len] = '-';
+        spec_len += 1;
+        spec_buf[spec_len] = '-';
+        spec_len += 1;
+        std.mem.copyForwards(u8, spec_buf[spec_len .. spec_len + flag.name.len], flag.name);
+        spec_len += flag.name.len;
 
-    const ty = if (flag.value_hint) |hint| hint else typeName(flag.value_type);
-    if (ty.len > 0) {
-        spec_buf[spec_len] = ' ';
-        spec_len += 1;
-        spec_buf[spec_len] = '<';
-        spec_len += 1;
-        std.mem.copyForwards(u8, spec_buf[spec_len .. spec_len + ty.len], ty);
-        spec_len += ty.len;
-        spec_buf[spec_len] = '>';
-        spec_len += 1;
-        if (flag.value_type == .string_list or flag.value_type == .key_value_list) {
-            spec_buf[spec_len] = '.';
+        const ty = if (flag.value_hint) |hint| hint else typeName(flag.value_type);
+        if (ty.len > 0) {
+            spec_buf[spec_len] = ' ';
             spec_len += 1;
-            spec_buf[spec_len] = '.';
+            spec_buf[spec_len] = '<';
             spec_len += 1;
-            spec_buf[spec_len] = '.';
+            std.mem.copyForwards(u8, spec_buf[spec_len .. spec_len + ty.len], ty);
+            spec_len += ty.len;
+            spec_buf[spec_len] = '>';
             spec_len += 1;
+            if (flag.value_type == .string_list or flag.value_type == .key_value_list) {
+                spec_buf[spec_len] = '.';
+                spec_len += 1;
+                spec_buf[spec_len] = '.';
+                spec_len += 1;
+                spec_buf[spec_len] = '.';
+                spec_len += 1;
+            }
         }
     }
 
@@ -266,17 +296,34 @@ fn renderOneFlag(
     if (is_global) try d.print(" [global]", .{});
 
     try printAlignedOptionRow(writer, profile, spec_buf[0..spec_len], desc_buf[0..d.end], spec_width, terminal_width, allocator);
+
+    // In full-help mode, render the extended description indented below the row.
+    if (mode == .full and flag.long_description.len > 0) {
+        const indent = 4 + spec_width + 2;
+        try printSpaces(writer, indent);
+        try writer.print("{s}\n", .{flag.long_description});
+    }
 }
 
 /// Computes display width of an option specification string.
 fn optionSpecLen(flag: Command.Flag) usize {
-    var len = flag.name.len + 2;
-    if (flag.short != null) len += 4;
+    if (flag.short != null) {
+        // "-x, " prefix
+        if (flag.negatable and flag.value_type == .bool) {
+            return 4 + "--[no-]".len + flag.name.len;
+        }
+    }
+    if (flag.negatable and flag.value_type == .bool) {
+        return "--[no-]".len + flag.name.len;
+    }
+
+    var len = flag.name.len + 2; // "--" + name
+    if (flag.short != null) len += 4; // "-x, "
 
     const ty = if (flag.value_hint) |hint| hint else typeName(flag.value_type);
     if (ty.len > 0) {
-        len += ty.len + 3;
-        if (flag.value_type == .string_list or flag.value_type == .key_value_list) len += 3;
+        len += ty.len + 3; // " <type>"
+        if (flag.value_type == .string_list or flag.value_type == .key_value_list) len += 3; // "..."
     }
 
     return len;

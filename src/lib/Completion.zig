@@ -16,6 +16,7 @@
 //!   candidates from `allowed_values`.
 
 const std = @import("std");
+
 const Command = @import("Command.zig");
 const ParseContext = @import("ParseContext.zig");
 
@@ -25,22 +26,26 @@ pub const Shell = enum {
     zsh,
     fish,
     powershell,
-    sh,
     nu,
 };
 
 /// Registers the built-in `completion` subcommand on root.
+///
+/// Accepts both `completion` and `completions` spellings as aliases.
 pub fn registerCompletionCommand(root: *Command) !void {
     if (root.findSubcommand("completion") != null) return;
+    if (root.findSubcommand("completions") != null) return;
 
     const completion = try root.addSubcommand(.{
         .name = "completion",
         .description = "Generate shell completion scripts",
     });
+    try completion.addAlias("completions");
     try completion.addPositional(.{
         .name = "shell",
-        .description = "One of: bash, zsh, fish, pwsh, sh, nu, nushell",
+        .description = "Target shell.",
         .required = true,
+        .allowed_values = &.{ "bash", "zsh", "fish", "pwsh", "nu", "nushell" },
     });
     try completion.addFlag(bool, .{
         .name = "dynamic",
@@ -72,8 +77,6 @@ pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8, dyna
         try renderFish(w, root.name);
     } else if (std.mem.eql(u8, shell, "pwsh")) {
         try renderPwsh(w, root.name);
-    } else if (std.mem.eql(u8, shell, "sh")) {
-        try renderSh(w, root.name);
     } else if (std.mem.eql(u8, shell, "nu") or std.mem.eql(u8, shell, "nushell")) {
         if (dynamic) {
             try renderNuDynamic(w, root.name);
@@ -96,7 +99,6 @@ pub fn generateCompletions(root: *Command, shell: Shell, writer: anytype) !void 
         .zsh => try renderZsh(writer, root.name),
         .fish => try renderFish(writer, root.name),
         .powershell => try renderPwsh(writer, root.name),
-        .sh => try renderSh(writer, root.name),
         .nu => try renderNuStatic(writer, root, root.name, true),
     }
 }
@@ -308,20 +310,6 @@ fn renderPwsh(w: anytype, name: []const u8) !void {
         \\}}
         \\
     , .{ name, name });
-}
-
-/// Emits POSIX-sh fallback (bash-style `complete`).
-fn renderSh(w: anytype, name: []const u8) !void {
-    try w.print(
-        \\# POSIX sh fallback: source in a bash-compatible shell.
-        \\_{s}_completion() {{
-        \\  local IFS='
-        \\'
-        \\  COMPREPLY=($("$(COMP_WORDS[0])" __complete "${{COMP_WORDS[@]:1}}"))
-        \\}}
-        \\complete -o default -F _{s}_completion {s}
-        \\
-    , .{ name, name, name });
 }
 
 /// Emits Nushell dynamic module (meta-completer friendly).

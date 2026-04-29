@@ -138,6 +138,46 @@ test "completion command with no args requests help" {
     try testing.expectEqualStrings("completion", ctx.command.name);
 }
 
+test "completions alias resolves to completion command" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    const ctx = try app.parseFrom(&.{"completions"});
+    try testing.expect(ctx.help_requested);
+    try testing.expectEqualStrings("completion", ctx.command.name);
+}
+
+test "negatable boolean flag sets to false with --no-flag" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    try app.root().addFlag(bool, .{ .name = "verbose", .short = 'v', .negatable = true, .default = true });
+
+    const ctx_on = try app.parseFrom(&.{"--verbose"});
+    try testing.expect(ctx_on.boolFlag("verbose").?);
+
+    const ctx_off = try app.parseFrom(&.{"--no-verbose"});
+    try testing.expect(!ctx_off.boolFlag("verbose").?);
+}
+
+test "short flag -h sets short_help_requested" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    const ctx = try app.parseFrom(&.{"-h"});
+    try testing.expect(ctx.short_help_requested);
+    try testing.expect(!ctx.help_requested);
+}
+
+test "long flag --help sets help_requested" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    const ctx = try app.parseFrom(&.{"--help"});
+    try testing.expect(ctx.help_requested);
+    try testing.expect(!ctx.short_help_requested);
+}
+
 test "version flag is only available on root command" {
     var app = try makeApp();
     defer app.deinit();
@@ -234,7 +274,7 @@ test "bundle with attached value on bool flags errors" {
     try testing.expectError(error.UnexpectedValueForBool, app.parseFrom(&.{"-ab=foo"}));
 }
 
-test "doc generator writes single markdown file by default" {
+test "doc generator writes single asciidoc file by default" {
     var app = try makeApp();
     defer app.deinit();
     const io = testing.io;
@@ -261,22 +301,22 @@ test "doc generator writes single markdown file by default" {
     std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
     defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
 
-    try app.generateMarkdownDocs(.{
+    try fangz.DocGenerator.generateDocs(testing.allocator, io, root, .{
         .mode = .single_file,
         .output_dir = out_dir,
     });
 
-    const path = out_dir ++ "/cli.md";
+    const path = out_dir ++ "/cli.adoc";
     const content = try readFileAlloc(io, testing.allocator, path);
     defer testing.allocator.free(content);
 
-    try testing.expect(std.mem.indexOf(u8, content, "# `git`") != null);
-    try testing.expect(std.mem.indexOf(u8, content, "## Commands") != null);
+    try testing.expect(std.mem.indexOf(u8, content, "= `git`") != null);
+    try testing.expect(std.mem.indexOf(u8, content, "== Commands") != null);
     try testing.expect(std.mem.indexOf(u8, content, "`commit`") != null);
     try testing.expect(std.mem.indexOf(u8, content, "--message <STRING>") != null);
 }
 
-test "doc generator writes one file per command" {
+test "doc generator writes one asciidoc file per command" {
     var app = try makeApp();
     defer app.deinit();
     const io = testing.io;
@@ -295,23 +335,23 @@ test "doc generator writes one file per command" {
     std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
     defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
 
-    try app.generateMarkdownDocs(.{
+    try fangz.DocGenerator.generateDocs(testing.allocator, io, root, .{
         .mode = .per_command,
         .output_dir = out_dir,
     });
 
-    const root_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/index.md");
+    const root_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/index.adoc");
     defer testing.allocator.free(root_doc);
-    try testing.expect(std.mem.indexOf(u8, root_doc, "[`remote`](remote/index.md)") != null);
+    try testing.expect(std.mem.indexOf(u8, root_doc, "link:remote/index.adoc[`remote`]") != null);
 
-    const remote_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/remote/index.md");
+    const remote_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/remote/index.adoc");
     defer testing.allocator.free(remote_doc);
-    try testing.expect(std.mem.indexOf(u8, remote_doc, "# `git remote`") != null);
-    try testing.expect(std.mem.indexOf(u8, remote_doc, "[`add`](add/index.md)") != null);
+    try testing.expect(std.mem.indexOf(u8, remote_doc, "= `git remote`") != null);
+    try testing.expect(std.mem.indexOf(u8, remote_doc, "link:add/index.adoc[`add`]") != null);
 
-    const add_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/remote/add/index.md");
+    const add_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/remote/add/index.adoc");
     defer testing.allocator.free(add_doc);
-    try testing.expect(std.mem.indexOf(u8, add_doc, "# `git remote add`") != null);
+    try testing.expect(std.mem.indexOf(u8, add_doc, "= `git remote add`") != null);
 }
 
 fn readFileAlloc(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {

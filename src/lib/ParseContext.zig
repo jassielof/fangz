@@ -48,7 +48,10 @@ command: *Command,
 flags: std.StringHashMap(FlagValue),
 positionals: std.ArrayList([]const u8),
 raw_positionals_after_terminator: std.ArrayList([]const u8),
+/// Set when the user passes `--help` or `help <cmd>`.  Triggers full help rendering.
 help_requested: bool = false,
+/// Set when the user passes `-h`.  Triggers compact (summary-only) help rendering.
+short_help_requested: bool = false,
 version_requested: bool = false,
 
 /// Initializes an empty parse context for a command.
