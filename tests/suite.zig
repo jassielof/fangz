@@ -302,7 +302,6 @@ test "doc generator writes single asciidoc file by default" {
     defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
 
     try fangz.DocGenerator.generateDocs(testing.allocator, io, root, .{
-        .mode = .single_file,
         .output_dir = out_dir,
     });
 
@@ -310,13 +309,13 @@ test "doc generator writes single asciidoc file by default" {
     const content = try readFileAlloc(io, testing.allocator, path);
     defer testing.allocator.free(content);
 
-    try testing.expect(std.mem.indexOf(u8, content, "= `git`") != null);
-    try testing.expect(std.mem.indexOf(u8, content, "== Commands") != null);
-    try testing.expect(std.mem.indexOf(u8, content, "`commit`") != null);
+    try testing.expect(std.mem.indexOf(u8, content, "= git CLI Reference") != null);
+    try testing.expect(std.mem.indexOf(u8, content, "== Command Index") != null);
+    try testing.expect(std.mem.indexOf(u8, content, "[#cmd-git-commit]") != null);
     try testing.expect(std.mem.indexOf(u8, content, "--message <STRING>") != null);
 }
 
-test "doc generator writes one asciidoc file per command" {
+test "doc generator renders nested commands as flat reference entries" {
     var app = try makeApp();
     defer app.deinit();
     const io = testing.io;
@@ -336,22 +335,15 @@ test "doc generator writes one asciidoc file per command" {
     defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
 
     try fangz.DocGenerator.generateDocs(testing.allocator, io, root, .{
-        .mode = .per_command,
         .output_dir = out_dir,
     });
 
-    const root_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/index.adoc");
-    defer testing.allocator.free(root_doc);
-    try testing.expect(std.mem.indexOf(u8, root_doc, "link:remote/index.adoc[`remote`]") != null);
-
-    const remote_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/remote/index.adoc");
-    defer testing.allocator.free(remote_doc);
-    try testing.expect(std.mem.indexOf(u8, remote_doc, "= `git remote`") != null);
-    try testing.expect(std.mem.indexOf(u8, remote_doc, "link:add/index.adoc[`add`]") != null);
-
-    const add_doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/remote/add/index.adoc");
-    defer testing.allocator.free(add_doc);
-    try testing.expect(std.mem.indexOf(u8, add_doc, "= `git remote add`") != null);
+    const doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/cli.adoc");
+    defer testing.allocator.free(doc);
+    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-git]") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-git-remote]") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-git-remote-add]") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, "=== `git remote add`") != null);
 }
 
 fn readFileAlloc(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
