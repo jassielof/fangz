@@ -6,7 +6,13 @@
 //!
 //! Use `generateCompletions(root, shell, writer)` with the `Shell` enum for type-safe script generation.  The shell-string-based `printCompletionScript` is kept for the built-in `completion <shell>` subcommand.
 //!
-//! ## Dynamic suggestions
+//! ## Nushell static completions
+//!
+//! The Nushell renderer emits a `module completions` block with `export extern` declarations.
+//! Positionals annotated with `CompletionKind.zig_paths` get a `@complete-zig-paths` custom
+//! completer that resolves directories and `.zig` / `.zon` files from the working directory.
+//!
+//! ## Dynamic runtime suggestions (`__complete`)
 //!
 //! When a flag is being completed with `--name=<prefix>`, suggestions include:
 //!
@@ -47,11 +53,6 @@ pub fn registerCompletionCommand(root: *Command) !void {
         .required = true,
         .allowed_values = &.{ "bash", "zsh", "fish", "pwsh", "nu", "nushell" },
     });
-    try completion.addFlag(bool, .{
-        .name = "dynamic",
-        .description = "For Nushell, emit dynamic completer module (default: static)",
-        .default = false,
-    });
     completion.setHelpOnEmptyArgs(true);
     completion.setHooks(.{ .run = runCompletionCommand });
 }
@@ -59,13 +60,12 @@ pub fn registerCompletionCommand(root: *Command) !void {
 /// Runs completion command and writes shell script to stdout.
 pub fn runCompletionCommand(ctx: *ParseContext) !void {
     const shell = ctx.positional(0) orelse return error.MissingRequiredPositional;
-    const dynamic = ctx.boolFlag("dynamic") orelse false;
-    try printCompletionScript(ctx.io, ctx.command.root(), shell, dynamic);
+    try printCompletionScript(ctx.io, ctx.command.root(), shell);
 }
 
 /// Writes completion script for requested shell (string-based, used by the
 /// built-in `completion` subcommand).
-pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8, dynamic: bool) !void {
+pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8) !void {
     var buf: [8192]u8 = undefined;
     var out = std.Io.File.stdout().writer(io, &buf);
     const w = &out.interface;
@@ -78,11 +78,7 @@ pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8, dyna
     } else if (std.mem.eql(u8, shell, "pwsh")) {
         try renderPwsh(w, root.name);
     } else if (std.mem.eql(u8, shell, "nu") or std.mem.eql(u8, shell, "nushell")) {
-        if (dynamic) {
-            try renderNuDynamic(w, root.name);
-        } else {
-            try renderNuStatic(w, root, root.name, true);
-        }
+        try renderNuStatic(w, root, root.name, true);
     } else {
         return error.InvalidEnumValue;
     }
@@ -312,85 +308,34 @@ fn renderPwsh(w: anytype, name: []const u8) !void {
     , .{ name, name });
 }
 
-/// Emits Nushell dynamic module (meta-completer friendly).
-fn renderNuDynamic(w: anytype, name: []const u8) !void {
-    try w.print(
-        \\# Nushell dynamic completion module for {s}
-        \\# Note: Nushell supports a single global external completer.
-        \\# This module includes helpers for composing with other completers.
-        \\module "{s}-completer" {{
-        \\  export def handles [spans: list<string>] {{
-        \\    ($spans | length) > 0 and ($spans.0 == "{s}")
-        \\  }}
-        \\
-        \\  export def complete [spans: list<string>] {{
-        \\    let args = ($spans | skip 1)
-        \\    ^{s} __complete ...$args
-        \\      | lines
-        \\      | where ($it | str length) > 0
-        \\      | each {{|x| {{value: $x description: $x}} }}
-        \\  }}
-        \\
-        \\  # Install as the only external completer.
-        \\  export def install [] {{
-        \\    $env.config = (
-        \\      $env.config
-        \\      | upsert completions.external.completer {{|spans|
-        \\          if (handles $spans) {{ complete $spans }} else {{ null }}
-        \\        }}
-        \\    )
-        \\  }}
-        \\
-        \\  # Return a completer closure that first delegates to this module.
-        \\  # If this module does not handle spans, delegate to fallback.
-        \\  export def chain [fallback: closure] {{
-        \\    {{|spans|
-        \\      if (handles $spans) {{
-        \\        complete $spans
-        \\      }} else {{
-        \\        do $fallback $spans
-        \\      }}
-        \\    }}
-        \\  }}
-        \\
-        \\  # Install while preserving an existing external completer.
-        \\  # If no completer exists, falls back to null results for non-matching commands.
-        \\  export def install-with-existing [] {{
-        \\    let prev = ($env.config.completions.external.completer? | default {{|_spans| null }})
-        \\    let chained = (chain $prev)
-        \\    $env.config = ($env.config | upsert completions.external.completer $chained)
-        \\  }}
-        \\
-        \\  # Build a dispatcher closure from a list of completer modules.
-        \\  # Usage example:
-        \\  #   let ext = (dispatch [ ({{|s| (mod-a handles $s)}}) ({{|s| (mod-a complete $s)}})
-        \\  #                        ({{|s| (mod-b handles $s)}}) ({{|s| (mod-b complete $s)}}) ])
-        \\  #   $env.config = ($env.config | upsert completions.external.completer $ext)
-        \\  export def dispatch [pairs: list<closure>] {{
-        \\    {{|spans|
-        \\      mut i = 0
-        \\      while $i < ($pairs | length) {{
-        \\        let h = ($pairs | get $i)
-        \\        let c = ($pairs | get ($i + 1))
-        \\        if (do $h $spans) {{
-        \\          return (do $c $spans)
-        \\        }}
-        \\        $i = ($i + 2)
-        \\      }}
-        \\      null
-        \\    }}
-        \\  }}
-        \\}}
-        \\
-        \\export use "{s}-completer" *
-        \\
-    , .{ name, name, name, name, name });
+/// Walks the command tree and appends every unique `NuCompleter` (deduplicated by name)
+/// into `out`.  Uses `page_allocator` consistent with the rest of this file.
+fn collectNuCompleters(cmd: *const Command, out: *std.ArrayList(Command.NuCompleter)) !void {
+    for (cmd.positionals.items) |pos| {
+        const completer = pos.nu_completer orelse continue;
+        // Deduplicate by name — linear scan is fine; apps have very few completers.
+        const already = for (out.items) |existing| {
+            if (std.mem.eql(u8, existing.name, completer.name)) break true;
+        } else false;
+        if (!already) try out.append(std.heap.page_allocator, completer);
+    }
+    for (cmd.subcommands.items) |sub| {
+        try collectNuCompleters(sub, out);
+    }
 }
 
 /// Emits static Nushell `extern` module for command tree.
 fn renderNuStatic(w: anytype, root: *const Command, path: []const u8, is_root: bool) !void {
     if (is_root) {
         try w.print("module completions {{\n\n", .{});
+
+        // Collect and emit all unique user-supplied Nushell custom completers.
+        var completers: std.ArrayList(Command.NuCompleter) = .empty;
+        defer completers.deinit(std.heap.page_allocator);
+        try collectNuCompleters(root, &completers);
+        for (completers.items) |c| {
+            try w.print("  def {s} [] {{\n    {s}\n  }}\n\n", .{ c.name, c.body });
+        }
     }
 
     if (is_root) {
@@ -408,12 +353,17 @@ fn renderNuStatic(w: anytype, root: *const Command, path: []const u8, is_root: b
     }
 
     for (root.positionals.items) |pos| {
+        const at_completer = if (pos.nu_completer) |c|
+            std.fmt.allocPrint(std.heap.page_allocator, "@{s}", .{c.name}) catch ""
+        else
+            "";
+        defer if (pos.nu_completer != null) std.heap.page_allocator.free(at_completer);
         if (pos.variadic) {
-            try w.print("    ...{s}: string\n", .{pos.name});
+            try w.print("    ...{s}: string{s}\n", .{ pos.name, at_completer });
         } else if (pos.required) {
-            try w.print("    {s}: string\n", .{pos.name});
+            try w.print("    {s}: string{s}\n", .{ pos.name, at_completer });
         } else {
-            try w.print("    {s}?: string\n", .{pos.name});
+            try w.print("    {s}?: string{s}\n", .{ pos.name, at_completer });
         }
     }
     try w.print("  ]\n\n", .{});

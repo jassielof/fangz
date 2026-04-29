@@ -5,9 +5,9 @@
 //! documentation generation.
 
 const std = @import("std");
-const ParseContext = @import("ParseContext.zig");
-
 const Allocator = std.mem.Allocator;
+
+const ParseContext = @import("ParseContext.zig");
 
 const Command = @This();
 
@@ -193,6 +193,27 @@ fn EnumTagValueTable(comptime EnumType: type) type {
     };
 }
 
+/// A user-supplied Nushell custom completer that can be attached to a positional argument.
+///
+/// `name` becomes both the `def` name and the `@name` reference in the `extern` signature.
+/// `body` is the single expression (or newline-separated statements) that forms the
+/// body of the generated `def <name> [] { <body> }` block.
+///
+/// Example — complete only YAML files:
+/// ```zig
+/// .nu_completer = .{
+///     .name = "complete-yaml-files",
+///     .body = "ls *.yaml | get name",
+/// }
+/// ```
+pub const NuCompleter = struct {
+    /// The Nushell `def` name, e.g. `"complete-zig-paths"`.  Must be a valid Nu identifier.
+    name: []const u8,
+    /// The body placed inside `def <name> [] { ... }`.  Single-line expressions work as-is;
+    /// for multi-line bodies embed `\n` with appropriate indentation.
+    body: []const u8,
+};
+
 pub const Positional = struct {
     name: []const u8,
     description: []const u8 = "",
@@ -200,6 +221,10 @@ pub const Positional = struct {
     variadic: bool = false,
     /// Optional constrained value set shown as `[possible values: ...]` in help.
     allowed_values: ?[]const []const u8 = null,
+    /// Optional Nushell custom completer for this positional.
+    /// When set, the generated `extern` signature uses `string@<name>` and a corresponding
+    /// `def <name> [] { <body> }` is emitted inside the completions module.
+    nu_completer: ?NuCompleter = null,
 };
 
 pub const Group = struct {
