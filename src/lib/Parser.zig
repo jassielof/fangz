@@ -1,7 +1,6 @@
 //! Primary parser for Fangz command trees.
 //!
-//! This module handles command dispatch, POSIX-style option parsing, value
-//! conversion/validation, and user-facing parse diagnostics.
+//! This module handles command dispatch, POSIX-style option parsing, value conversion/validation, and user-facing parse diagnostics.
 
 const std = @import("std");
 
