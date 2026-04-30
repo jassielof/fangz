@@ -25,6 +25,14 @@ pub fn render(writer: anytype, command: *const Command, profile: ColorProfile, m
     if (mode == .full and command.long_description.len > 0) {
         try writer.print("\n{s}\n", .{command.long_description});
     }
+    if (command.aliases.items.len > 0) {
+        try writer.print("\n", .{});
+        try carnaval.Style.init().bolded().renderWithProfile("Aliases:", writer, profile);
+        try writer.print("\n", .{});
+        for (command.aliases.items) |alias| {
+            try writer.print("  {s}\n", .{alias});
+        }
+    }
     const terminal_width = carnaval.terminalWidthForHandle(std.Io.File.stdout().handle);
     try renderUsage(writer, command, profile);
 
@@ -89,15 +97,27 @@ fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfi
         var desc_buf: [512]u8 = undefined;
         var dw: std.Io.Writer = .fixed(&desc_buf);
         if (arg.description.len > 0) try dw.print("{s}", .{arg.description});
-        if (arg.required) try dw.print(" [required]", .{});
+        // [required] is communicated by <name> in the Usage line; do not repeat it here.
         if (arg.variadic) try dw.print(" [variadic]", .{});
         if (arg.allowed_values) |vals| {
-            try dw.print(" [possible values: ", .{});
-            for (vals, 0..) |v, i| {
-                if (i != 0) try dw.print(", ", .{});
-                try dw.print("{s}", .{v});
+            switch (arg.allowed_values_style) {
+                .comma => {
+                    try dw.print(" [possible values: ", .{});
+                    for (vals, 0..) |v, i| {
+                        if (i != 0) try dw.print(", ", .{});
+                        try dw.print("{s}", .{v});
+                    }
+                    try dw.print("]", .{});
+                },
+                .bullet_list => {
+                    // Append inline label; bullets rendered after the row.
+                    if (dw.end > 0) {
+                        try dw.print(" One of:", .{});
+                    } else {
+                        try dw.print("One of:", .{});
+                    }
+                },
             }
-            try dw.print("]", .{});
         }
 
         try printAlignedCommandRow(
@@ -110,6 +130,28 @@ fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfi
             terminal_width,
             command.allocator,
         );
+
+        if (arg.allowed_values) |vals| {
+            if (arg.allowed_values_style == .bullet_list) {
+                // Bullets are indented 2 spaces past the description column.
+                const continuation_pad = 2 + spec_width + 2;
+                var max_val_width: usize = 0;
+                for (vals) |v| {
+                    if (v.len > max_val_width) max_val_width = v.len;
+                }
+                for (vals, 0..) |v, i| {
+                    try printSpaces(writer, continuation_pad + 2);
+                    try writer.print("\u{2022} {s}", .{v});
+                    if (arg.allowed_value_labels) |lbls| {
+                        if (i < lbls.len and lbls[i].len > 0) {
+                            if (max_val_width > v.len) try printSpaces(writer, max_val_width - v.len);
+                            try writer.print("  {s}", .{lbls[i]});
+                        }
+                    }
+                    try writer.print("\n", .{});
+                }
+            }
+        }
     }
 }
 
@@ -286,16 +328,50 @@ fn renderOneFlag(
         }
     }
     if (flag.allowed_values) |values| {
-        try d.print(" [possible values: ", .{});
-        for (values, 0..) |v, i| {
-            if (i != 0) try d.print(", ", .{});
-            try d.print("{s}", .{v});
+        switch (flag.allowed_values_style) {
+            .comma => {
+                try d.print(" [possible values: ", .{});
+                for (values, 0..) |v, i| {
+                    if (i != 0) try d.print(", ", .{});
+                    try d.print("{s}", .{v});
+                }
+                try d.print("]", .{});
+            },
+            .bullet_list => {
+                // Append inline label; bullets rendered after the row.
+                if (d.end > 0) {
+                    try d.print(" One of:", .{});
+                } else {
+                    try d.print("One of:", .{});
+                }
+            },
         }
-        try d.print("]", .{});
     }
     if (is_global) try d.print(" [global]", .{});
 
     try printAlignedOptionRow(writer, profile, spec_buf[0..spec_len], desc_buf[0..d.end], spec_width, terminal_width, allocator);
+
+    // Render allowed values as aligned bullets below the row for .list style.
+    if (flag.allowed_values) |values| {
+        if (flag.allowed_values_style == .bullet_list) {
+            const continuation_pad = 2 + spec_width + 2;
+            var max_val_width: usize = 0;
+            for (values) |v| {
+                if (v.len > max_val_width) max_val_width = v.len;
+            }
+            for (values, 0..) |v, i| {
+                try printSpaces(writer, continuation_pad + 2);
+                try writer.print("\u{2022} {s}", .{v});
+                if (flag.allowed_value_labels) |lbls| {
+                    if (i < lbls.len and lbls[i].len > 0) {
+                        if (max_val_width > v.len) try printSpaces(writer, max_val_width - v.len);
+                        try writer.print("  {s}", .{lbls[i]});
+                    }
+                }
+                try writer.print("\n", .{});
+            }
+        }
+    }
 
     // In full-help mode, render the extended description indented below the row.
     if (mode == .full and flag.long_description.len > 0) {

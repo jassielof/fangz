@@ -65,6 +65,14 @@ pub const DefaultValue = union(enum) {
     enum_tag: u32,
 };
 
+/// Controls how `allowed_values` are rendered in help output.
+pub const AllowedValuesStyle = enum {
+    /// Shows values inline: "[possible values: a, b, c]".
+    comma,
+    /// Shows values as a Carnaval bullet list below the argument/flag description.
+    bullet_list,
+};
+
 pub const Flag = struct {
     name: []const u8,
     short: ?u8 = null,
@@ -83,6 +91,11 @@ pub const Flag = struct {
     enum_values: ?[]const u32 = null,
     allowed_keys: ?[]const []const u8 = null,
     value_hint: ?[]const u8 = null,
+    /// Controls how `allowed_values` are rendered in help output.
+    allowed_values_style: AllowedValuesStyle = .comma,
+    /// Optional display labels for each allowed value, shown alongside the value in help output.
+    /// When provided, must have the same length as `allowed_values`.
+    allowed_value_labels: ?[]const []const u8 = null,
 
     /// Returns whether the flag expects a value token.
     pub fn takesValue(self: Flag) bool {
@@ -154,6 +167,10 @@ pub fn FlagOptions(comptime T: type) type {
         value_hint: ?[]const u8 = null,
         allowed_keys: ?[]const []const u8 = null,
         allowed_values: ?[]const []const u8 = null,
+        /// Controls how `allowed_values` are rendered in help output.
+        allowed_values_style: AllowedValuesStyle = .comma,
+        /// Optional display labels for each allowed value, shown alongside the value in help output.
+        allowed_value_labels: ?[]const []const u8 = null,
     };
 }
 
@@ -221,6 +238,11 @@ pub const Positional = struct {
     variadic: bool = false,
     /// Optional constrained value set shown as `[possible values: ...]` in help.
     allowed_values: ?[]const []const u8 = null,
+    /// Controls how `allowed_values` are rendered in help output.
+    allowed_values_style: AllowedValuesStyle = .comma,
+    /// Optional display labels for each allowed value, shown alongside the value in help output.
+    /// When provided, must have the same length as `allowed_values`.
+    allowed_value_labels: ?[]const []const u8 = null,
     /// Optional Nushell custom completer for this positional.
     /// When set, the generated `extern` signature uses `string@<name>` and a corresponding
     /// `def <name> [] { <body> }` is emitted inside the completions module.
@@ -359,6 +381,8 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
         .negatable = opts.negatable,
         .allowed_keys = opts.allowed_keys,
         .value_hint = opts.value_hint,
+        .allowed_values_style = opts.allowed_values_style,
+        .allowed_value_labels = opts.allowed_value_labels,
     };
 
     if (value_type == .enum_tag) {

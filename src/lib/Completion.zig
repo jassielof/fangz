@@ -72,6 +72,20 @@ pub const Shell = enum {
     }
 };
 
+/// Returns the pretty display label for each `Shell` variant, in the same order as `Shell.allowedValues()`.
+fn shellAllowedValueLabels() []const []const u8 {
+    return comptime blk: {
+        const fields = @typeInfo(Shell).@"enum".fields;
+        var labels: [fields.len][]const u8 = undefined;
+        for (fields, 0..) |field, i| {
+            const shell_val: Shell = @enumFromInt(field.value);
+            labels[i] = shell_val.toPrettyName();
+        }
+        const final = labels;
+        break :blk &final;
+    };
+}
+
 /// Registers the built-in completions subcommand on root.
 ///
 /// Accepts completion/s spellings as aliases.
@@ -86,12 +100,13 @@ pub fn registerCompletionCommand(root: *Command) !void {
 
     try completion.addAlias("completions");
 
-    // TODO: I'd like to use Carvanal's list rendering for the shells, instead of comma-separated list. And to not break it a lot, since I guess I need to modify the parsing and printing on Fangz, it'd be better an option on how to render the allowed values, either as comma-separated or as a list (using Carnaval).
     try completion.addPositional(.{
         .name = "shell",
         .description = "Target shell.",
         .required = true,
         .allowed_values = Shell.allowedValues(),
+        .allowed_value_labels = shellAllowedValueLabels(),
+        .allowed_values_style = .comma,
     });
 
     completion.setHelpOnEmptyArgs(true);
