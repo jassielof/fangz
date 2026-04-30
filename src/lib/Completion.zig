@@ -106,7 +106,7 @@ pub fn registerCompletionCommand(root: *Command) !void {
         .required = true,
         .allowed_values = Shell.allowedValues(),
         .allowed_value_labels = shellAllowedValueLabels(),
-        .allowed_values_style = .comma,
+        .allowed_values_style = .bullet_list,
     });
 
     completion.setHelpOnEmptyArgs(true);
@@ -143,7 +143,7 @@ pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8) !voi
 /// Generates a completion script for the given shell to `writer`.
 ///
 /// This is the typed API intended for programmatic use.  The `writer` may be  any `anytype` writer (file, buffer, etc.).
-// TODO: Writer should be respective type of the new Writergate interface, not anytype.
+// TODO: Writer should be respective type of the new Writergate interface, not anytype. This should be reviewed also in all the project's codebase.
 pub fn generateCompletions(root: *Command, shell: Shell, writer: anytype) !void {
     switch (shell) {
         .bash => try renderBash(writer, root.name),
@@ -244,10 +244,8 @@ fn suggestFlags(writer: anytype, cmd: *const Command, prefix: []const u8) !void 
 /// Suggests values for a specific flag given an already-typed value prefix.
 ///
 /// - `enum_tag` / `string` with `allowed_values`: emits `name_prefix<value>`.
-/// - `key_value_list` without `=` in value_prefix: emits `name_prefix<key>=`
-///   candidates from `allowed_keys`.
-/// - `key_value_list` with `=` in value_prefix: emits `name_prefix<key>=<val>`
-///   candidates from `allowed_values`.
+/// - `key_value_list` without `=` in value_prefix: emits `name_prefix<key>=` candidates from `allowed_keys`.
+/// - `key_value_list` with `=` in value_prefix: emits `name_prefix<key>=<val>` candidates from `allowed_values`.
 fn suggestFlagValues(
     writer: anytype,
     name_prefix: []const u8,

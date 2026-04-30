@@ -200,9 +200,18 @@ Fangz injects a `completion` subcommand into every application. Supported shells
 
 Priority is given to shells that see active use during development. Nushell is the current primary. Additional shells beyond this list are not planned for first-party support and are open to contributions.
 
-> **Known issue:** Nushell's completion engine produces a syntax error on kebab-cased flag names in some completion contexts. Under investigation.
+> **Known issue:** Nushell's completion engine produces a syntax error on kebab-cased names in some completion contexts. Under investigation.
 
-As well, seems that the dynamic flag in the completions is useless, as static and dynamic are complementary, the library should do best effort to generate automatically by default if the user uses dynamic-needed features.
+The issue is the following, on my TypM project, it generates:
+
+```nu
+export extern "typm install" [
+  --help(-h)              # Print help
+  git-source: string
+]
+```
+
+Where `git-source` seeems invalid.
 
 ## Credits
 

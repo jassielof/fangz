@@ -8,9 +8,9 @@ pub const Command = @import("Command.zig");
 pub const KeyValuePair = Command.KeyValuePair;
 pub const KeyValueList = Command.KeyValueList;
 pub const DocGenerator = @import("DocGenerator.zig");
-pub const FangzError = @import("error.zig").FangzError;
+const errors = @import("errors.zig");
+pub const FangzError = errors.FangzError;
 pub const ParseContext = @import("ParseContext.zig");
-/// Supported shell targets for completion script generation.
 pub const Shell = @import("Completion.zig").Shell;
 pub const Tokenizer = @import("Tokenizer.zig");
 

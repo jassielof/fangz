@@ -5,13 +5,15 @@
 //! and documentation generation.
 
 const std = @import("std");
+
 const carnaval = @import("carnaval");
 const meta = @import("fangz_meta");
 
 const Command = @import("Command.zig");
 const Completion = @import("Completion.zig");
 const DocGenerator = @import("DocGenerator.zig");
-const FangzError = @import("error.zig").FangzError;
+const errors = @import("errors.zig");
+const FangzError = errors.FangzError;
 const HelpRenderer = @import("HelpRenderer.zig");
 const ParseContext = @import("ParseContext.zig");
 const Parser = @import("Parser.zig");
@@ -351,4 +353,3 @@ fn prepareConsole() void {
     carnaval.prepareWindowsConsoleIfNeeded(std.Io.File.stdout().handle);
     carnaval.prepareWindowsConsoleIfNeeded(std.Io.File.stderr().handle);
 }
-

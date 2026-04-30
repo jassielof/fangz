@@ -1,4 +1,4 @@
-//! Clap-style help renderer for Fangz command trees.
+//! Help renderer module.
 
 const std = @import("std");
 
@@ -9,22 +9,28 @@ const Command = @import("Command.zig");
 
 /// Controls the verbosity of the rendered help output.
 ///
-/// - `.short` — compact output triggered by `-h`: synopsis, argument list, flag
-///              list with one-liner summaries only.
-/// - `.full`  — complete output triggered by `--help` or `help <cmd>`: same as
-///              short plus per-flag `long_description` and per-command `long_description`.
+/// - `.short` — compact output triggered by `-h`: synopsis, argument list, flag list with one-liner summaries only.
+/// - `.full`  — complete output triggered by `--help` or `help <cmd>`: same asshort plus per-flag `long_description` and per-command `long_description`.
 pub const HelpMode = enum { short, full };
 
 /// Renders command help sections to the provided writer.
-pub fn render(writer: anytype, command: *const Command, profile: ColorProfile, mode: HelpMode) !void {
+pub fn render(
+    writer: anytype,
+    command: *const Command,
+    profile: ColorProfile,
+    mode: HelpMode,
+) !void {
     try carnaval.Style.init().bolded().renderWithProfile(command.name, writer, profile);
     try writer.print("\n", .{});
+
     if (command.description.len > 0) {
         try writer.print("{s}\n", .{command.description});
     }
+
     if (mode == .full and command.long_description.len > 0) {
         try writer.print("\n{s}\n", .{command.long_description});
     }
+
     if (command.aliases.items.len > 0) {
         try writer.print("\n", .{});
         try carnaval.Style.init().bolded().renderWithProfile("Aliases:", writer, profile);
