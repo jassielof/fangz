@@ -9,8 +9,7 @@
 //! ## Nushell static completions
 //!
 //! The Nushell renderer emits a `module completions` block with `export extern` declarations.
-//! Positionals annotated with `CompletionKind.zig_paths` get a `@complete-zig-paths` custom
-//! completer that resolves directories and `.zig` / `.zon` files from the working directory.
+//! Positionals annotated with `CompletionKind.zig_paths` get a `@complete-zig-paths` custom  completer that resolves directories and `.zig` / `.zon` files from the working directory.
 //!
 //! ## Dynamic runtime suggestions (`__complete`)
 //!
@@ -18,8 +17,9 @@
 //!
 //! - For `enum_tag` and `string` flags with `allowed_values`: the allowed values.
 //! - For `key_value_list` flags: `--name=<key>=` candidates from `allowed_keys`.
-//! - For `key_value_list` flags after `--name=<key>=`: `--name=<key>=<value>`
-//!   candidates from `allowed_values`.
+//! - For `key_value_list` flags after `--name=<key>=`: `--name=<key>=<value>` candidates from `allowed_values`.
+
+// TODO: Move this to a shells directory, and also move each respective shell completion step into its own file.
 
 const std = @import("std");
 
@@ -28,16 +28,53 @@ const ParseContext = @import("ParseContext.zig");
 
 /// Supported shell targets for completion script generation.
 pub const Shell = enum {
+    /// <https://www.gnu.org/software/bash/>
     bash,
+    /// <https://www.zsh.org/>
     zsh,
+    /// <https://fishshell.com/>
     fish,
-    powershell,
+    /// <https://www.microsoft.com/PowerShell>
+    pwsh,
+    /// <https://www.nushell.sh/>
     nu,
+
+    /// Returns the human-friendly name of the shell.
+    pub fn toPrettyName(self: Shell) []const u8 {
+        return switch (self) {
+            .bash => "Bash",
+            .zsh => "Zsh",
+            .fish => "Fish",
+            .pwsh => "PowerShell",
+            .nu => "Nushell",
+        };
+    }
+
+    /// Returns the string name of the shell, based off the enum tag.
+    pub fn toStringName(self: Shell) []const u8 {
+        return @tagName(self);
+    }
+
+    /// Returns a list of allowed string values for the Shell enum.
+    pub fn allowedValues() []const []const u8 {
+        return comptime blk: {
+            const fields = @typeInfo(Shell).@"enum".fields;
+            var values: [fields.len][]const u8 = undefined;
+
+            for (fields, 0..) |field, i| {
+                values[i] = field.name;
+            }
+
+            const final = values;
+
+            break :blk &final;
+        };
+    }
 };
 
-/// Registers the built-in `completion` subcommand on root.
+/// Registers the built-in completions subcommand on root.
 ///
-/// Accepts both `completion` and `completions` spellings as aliases.
+/// Accepts completion/s spellings as aliases.
 pub fn registerCompletionCommand(root: *Command) !void {
     if (root.findSubcommand("completion") != null) return;
     if (root.findSubcommand("completions") != null) return;
@@ -46,13 +83,17 @@ pub fn registerCompletionCommand(root: *Command) !void {
         .name = "completion",
         .description = "Generate shell completion scripts",
     });
+
     try completion.addAlias("completions");
+
+    // TODO: I'd like to use Carvanal's list rendering for the shells, instead of comma-separated list. And to not break it a lot, since I guess I need to modify the parsing and printing on Fangz, it'd be better an option on how to render the allowed values, either as comma-separated or as a list (using Carnaval).
     try completion.addPositional(.{
         .name = "shell",
         .description = "Target shell.",
         .required = true,
-        .allowed_values = &.{ "bash", "zsh", "fish", "pwsh", "nu", "nushell" },
+        .allowed_values = Shell.allowedValues(),
     });
+
     completion.setHelpOnEmptyArgs(true);
     completion.setHooks(.{ .run = runCompletionCommand });
 }
@@ -63,8 +104,7 @@ pub fn runCompletionCommand(ctx: *ParseContext) !void {
     try printCompletionScript(ctx.io, ctx.command.root(), shell);
 }
 
-/// Writes completion script for requested shell (string-based, used by the
-/// built-in `completion` subcommand).
+/// Writes completion script for requested shell (string-based, used by the built-in `completion` subcommand).
 pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8) !void {
     var buf: [8192]u8 = undefined;
     var out = std.Io.File.stdout().writer(io, &buf);
@@ -87,14 +127,14 @@ pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8) !voi
 
 /// Generates a completion script for the given shell to `writer`.
 ///
-/// This is the typed API intended for programmatic use.  The `writer` may be
-/// any `anytype` writer (file, buffer, etc.).
+/// This is the typed API intended for programmatic use.  The `writer` may be  any `anytype` writer (file, buffer, etc.).
+// TODO: Writer should be respective type of the new Writergate interface, not anytype.
 pub fn generateCompletions(root: *Command, shell: Shell, writer: anytype) !void {
     switch (shell) {
         .bash => try renderBash(writer, root.name),
         .zsh => try renderZsh(writer, root.name),
         .fish => try renderFish(writer, root.name),
-        .powershell => try renderPwsh(writer, root.name),
+        .pwsh => try renderPwsh(writer, root.name),
         .nu => try renderNuStatic(writer, root, root.name, true),
     }
 }
@@ -141,9 +181,7 @@ fn suggestCommands(writer: anytype, cmd: *const Command, prefix: []const u8) !vo
 
 /// Suggests short/long flags or flag values matching `prefix`.
 ///
-/// When the prefix contains `=` (e.g. `--format=` or `--rule=name=`), the
-/// function switches to value-completion mode: it looks up the flag and
-/// emits candidates from `allowed_values` / `allowed_keys`.
+/// When the prefix contains `=` (e.g. `--format=` or `--rule=name=`), the function switches to value-completion mode: it looks up the flag and emits candidates from `allowed_values` / `allowed_keys`.
 fn suggestFlags(writer: anytype, cmd: *const Command, prefix: []const u8) !void {
     // Value-completion mode: prefix is "--flag-name=<value-prefix>"
     if (std.mem.startsWith(u8, prefix, "--")) {

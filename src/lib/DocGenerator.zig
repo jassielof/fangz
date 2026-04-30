@@ -1,9 +1,10 @@
 //! AsciiDoc documentation generator for Fangz command trees.
 //!
-//! Fangz converts the parser/runtime command tree into a render-friendly
-//! documentation model, then renders a single AsciiDoc file with Trama.
+//! Fangz converts the parser/runtime command tree into a render-friendly documentation model, then renders a single AsciiDoc file with Trama.
 
+// TODO: Move a lot of this into the docs directory, and use file-based structs.
 const std = @import("std");
+
 const trama = @import("trama");
 
 const Command = @import("Command.zig");
@@ -193,6 +194,7 @@ pub fn generateDocs(
     try writeFile(io, output_path, doc, options.overwrite);
 }
 
+// TODO: Move as a template file, instead of hardcoding.
 const default_template =
     \\= {{ title }}
     \\{{ if author_name }}{{ author_name }}{{ if author_email }} <{{ author_email }}>{{ end }}

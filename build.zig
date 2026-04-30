@@ -8,22 +8,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const carnaval_dep = b.dependency(
-        "carnaval",
-        .{
-            .target = target,
-            .optimize = optimize,
-        },
-    );
+    const carnaval_dep = b.dependency("carnaval", .{});
 
     const carnaval_mod = carnaval_dep.module("carnaval");
-    const trama_dep = b.dependency(
-        "trama",
-        .{
-            .target = target,
-            .optimize = optimize,
-        },
-    );
+    const trama_dep = b.dependency("trama", .{});
     const trama_mod = trama_dep.module("trama");
 
     const libary_module = b.addModule(
