@@ -409,12 +409,16 @@ fn renderNuStatic(w: anytype, root: *const Command, path: []const u8, is_root: b
         else
             "";
         defer if (pos.nu_completer != null) std.heap.page_allocator.free(at_completer);
+        // Nushell rejects hyphens in positional parameter names, so normalize
+        // kebab-case names to snake_case.
+        const nu_name = try std.mem.replaceOwned(u8, std.heap.page_allocator, pos.name, "-", "_");
+        defer std.heap.page_allocator.free(nu_name);
         if (pos.variadic) {
-            try w.print("    ...{s}: string{s}\n", .{ pos.name, at_completer });
+            try w.print("    ...{s}: string{s}\n", .{ nu_name, at_completer });
         } else if (pos.required) {
-            try w.print("    {s}: string{s}\n", .{ pos.name, at_completer });
+            try w.print("    {s}: string{s}\n", .{ nu_name, at_completer });
         } else {
-            try w.print("    {s}?: string{s}\n", .{ pos.name, at_completer });
+            try w.print("    {s}?: string{s}\n", .{ nu_name, at_completer });
         }
     }
     try w.print("  ]\n\n", .{});
