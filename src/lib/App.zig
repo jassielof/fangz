@@ -11,7 +11,7 @@ const Command = @import("Command.zig");
 const Completion = @import("Completion.zig");
 const DocGenerator = @import("DocGenerator.zig");
 const errors = @import("errors.zig");
-const FangzError = errors.FangzError;
+const Error = errors.Error;
 const HelpRenderer = @import("HelpRenderer.zig");
 const ParseContext = @import("ParseContext.zig");
 const Parser = @import("Parser.zig");
@@ -65,7 +65,7 @@ pub const Init = struct {
 };
 
 /// Constructs an application with a root command.
-pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: Init) FangzError!App {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: Init) Error!App {
     prepareConsole();
 
     // Fall back to build-injected meta when fields are absent.
@@ -126,7 +126,7 @@ pub fn setDocsEnabled(self: *App, enabled: bool) void {
 }
 
 /// Parses explicit argv tokens and returns the active parse context.
-pub fn parseFrom(self: *App, argv: []const []const u8) FangzError!*ParseContext {
+pub fn parseFrom(self: *App, argv: []const []const u8) Error!*ParseContext {
     try self.ensureDocsCommand();
     try self.ensureCompletionCommand();
     try self.root_command.freeze();
@@ -140,7 +140,7 @@ pub fn parseFrom(self: *App, argv: []const []const u8) FangzError!*ParseContext 
 }
 
 /// Parses the current process argv and returns the parse context.
-pub fn parseProcess(self: *App, process_args: std.process.Args) FangzError!*ParseContext {
+pub fn parseProcess(self: *App, process_args: std.process.Args) Error!*ParseContext {
     try self.ensureDocsCommand();
     try self.ensureCompletionCommand();
     try self.root_command.freeze();
