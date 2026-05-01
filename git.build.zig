@@ -64,14 +64,21 @@ pub fn extractBranch(b: *std.Build) []const u8 {
     return "";
 }
 
-// TODO: Implement author (not commiter) extraction
-/// Using `git show -s --format=%aN HEAD`
-// pub fn commitAuthor(b: *std.Build) ?[]const u8 {}
-// TODO: Implement email extraction
-/// Using `git show -s --format=%aE HEAD`
-// pub fn commitEmail(b: *std.Build) ?[]const u8 {}
+/// Returns the author name for HEAD (`git show -s --format=%aN HEAD`), or `null` when git is unavailable, the working directory is not a repository, or the value is empty.
+pub fn commitAuthor(b: *std.Build) ?[]const u8 {
+    return commitField(b, "--format=%aN");
+}
+
+/// Returns the author email for HEAD (`git show -s --format=%aE HEAD`), or `null` when git is unavailable, the working directory is not a repository, or the value is empty.
+pub fn commitEmail(b: *std.Build) ?[]const u8 {
+    return commitField(b, "--format=%aE");
+}
 
 pub fn commitDate(b: *std.Build) ?[]const u8 {
+    return commitField(b, "--format=%cs");
+}
+
+fn commitField(b: *std.Build, format_arg: []const u8) ?[]const u8 {
     if (!std.process.can_spawn) return null;
 
     const git = b.findProgram(&.{"git"}, &.{}) catch return null;
@@ -84,7 +91,7 @@ pub fn commitDate(b: *std.Build) ?[]const u8 {
             b.build_root.path orelse ".",
             "show",
             "-s",
-            "--format=%cs",
+            format_arg,
             "HEAD",
         },
         &code,
@@ -93,9 +100,9 @@ pub fn commitDate(b: *std.Build) ?[]const u8 {
 
     if (code != 0) return null;
 
-    const date = std.mem.trim(u8, output, " \t\r\n");
+    const value = std.mem.trim(u8, output, " \t\r\n");
 
-    if (date.len == 0) return null;
+    if (value.len == 0) return null;
 
-    return date;
+    return value;
 }
