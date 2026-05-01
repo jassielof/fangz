@@ -82,10 +82,8 @@ fn commitField(b: *std.Build, format_arg: []const u8) ?[]const u8 {
     if (!std.process.can_spawn) return null;
 
     const git = b.findProgram(&.{"git"}, &.{}) catch return null;
-    var code: u8 = undefined;
-
-    const output = b.runAllowFail(
-        &.{
+    const result = std.process.run(b.allocator, b.graph.io, .{
+        .argv = &.{
             git,
             "-C",
             b.build_root.path orelse ".",
@@ -94,15 +92,18 @@ fn commitField(b: *std.Build, format_arg: []const u8) ?[]const u8 {
             format_arg,
             "HEAD",
         },
-        &code,
-        .ignore,
-    ) catch return null;
+        .cwd = .inherit,
+    }) catch return null;
+    defer {
+        b.allocator.free(result.stdout);
+        b.allocator.free(result.stderr);
+    }
 
-    if (code != 0) return null;
+    if (result.term != .exited or result.term.exited != 0) return null;
 
-    const value = std.mem.trim(u8, output, " \t\r\n");
+    const value = std.mem.trim(u8, result.stdout, " \t\r\n");
 
     if (value.len == 0) return null;
 
-    return value;
+    return b.dupe(value);
 }
