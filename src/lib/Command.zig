@@ -279,6 +279,16 @@ pub const Init = struct {
     /// Extended description shown only in `--help` output.
     long_description: []const u8 = "",
     version: ?[]const u8 = null,
+    /// Author name used by generated documentation.
+    author_name: []const u8 = "",
+    /// Author email used by generated documentation.
+    author_email: []const u8 = "",
+    /// Git branch name used by generated documentation.
+    git_branch: []const u8 = "",
+    /// Git commit hash used by generated documentation.
+    git_commit: []const u8 = "",
+    /// Source date used by generated documentation.
+    source_date: []const u8 = "",
     group_id: ?[]const u8 = null,
 };
 
@@ -290,6 +300,16 @@ description: []const u8,
 /// Extended description shown only in `--help` output.
 long_description: []const u8,
 version: ?[]const u8,
+/// Author name used by generated documentation.
+author_name: []const u8,
+/// Author email used by generated documentation.
+author_email: []const u8,
+/// Git branch name used by generated documentation.
+git_branch: []const u8,
+/// Git commit hash used by generated documentation.
+git_commit: []const u8,
+/// Source date used by generated documentation.
+source_date: []const u8,
 group_id: ?[]const u8,
 aliases: std.ArrayList([]const u8),
 groups: std.ArrayList(Group),
@@ -318,6 +338,11 @@ pub fn init(allocator: Allocator, cfg: Init) !Command {
         .description = cfg.description,
         .long_description = cfg.long_description,
         .version = cfg.version,
+        .author_name = cfg.author_name,
+        .author_email = cfg.author_email,
+        .git_branch = cfg.git_branch,
+        .git_commit = cfg.git_commit,
+        .source_date = cfg.source_date,
         .group_id = cfg.group_id,
         .aliases = try std.ArrayList([]const u8).initCapacity(allocator, 2),
         .groups = try std.ArrayList(Group).initCapacity(allocator, 2),

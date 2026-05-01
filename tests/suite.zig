@@ -346,6 +346,35 @@ test "doc generator renders nested commands as flat reference entries" {
     try testing.expect(std.mem.indexOf(u8, doc, "=== `git remote add`") != null);
 }
 
+test "app docs include configured author and revision metadata" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{
+        .name = "git",
+        .description = "test app",
+        .version = "1.2.3",
+        .author_name = "Ada Lovelace",
+        .author_email = "ada@example.com",
+        .commit = "abc1234",
+        .branch = "main",
+        .source_date = "2026-05-01",
+    });
+    defer app.deinit();
+
+    const out_dir = "zig-out/docgen-meta";
+    std.Io.Dir.cwd().deleteTree(testing.io, out_dir) catch {};
+    defer std.Io.Dir.cwd().deleteTree(testing.io, out_dir) catch {};
+
+    try app.generateDocs(.{
+        .output_dir = out_dir,
+    });
+
+    const doc = try readFileAlloc(testing.io, testing.allocator, out_dir ++ "/cli.adoc");
+    defer testing.allocator.free(doc);
+
+    try testing.expect(std.mem.indexOf(u8, doc, "Ada Lovelace <ada@example.com>") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, "v1.2.3: main@abc1234") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, ":revdate: 2026-05-01") != null);
+}
+
 fn readFileAlloc(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
 }

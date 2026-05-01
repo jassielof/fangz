@@ -60,7 +60,7 @@ pub fn manifestVersion(b: *std.Build) ?[]const u8 {
     return b.dupe(manifest.version);
 }
 
-/// Injects the consumer's binary name, manifest version, and current git commit/branch into the fangz library module as a `fangz_meta` options module, making them available as defaults inside `App.init`.
+/// Injects the consumer's binary name, manifest version, and current git metadata into the fangz library module as a `fangz_meta` options module, making them available as defaults inside `App.init`.
 ///
 /// Call this from your `build.zig` after resolving the fangz dependency:
 ///
@@ -76,10 +76,13 @@ pub fn manifestVersion(b: *std.Build) ?[]const u8 {
 ///
 /// - `name`: `compile.name` (the executable name)
 /// - `version`: extracted from the consumer's `build.zig.zon`
+/// - `author_name`: git author name for `HEAD`
+/// - `author_email`: git author email for `HEAD`
 /// - `commit`: short git commit hash (`git rev-parse --short HEAD`)
 /// - `branch`: current git branch (`git rev-parse --abbrev-ref HEAD`)
+/// - `source_date`: git commit date, falling back to the build date
 ///
-/// Git fields fall back to `""` when git is unavailable or the directory is not a repository. After injection, `App.init` uses these as fallback values when `.name`, `.version`, `.commit`, or `.branch` are omitted.
+/// Git fields fall back to `""` when git is unavailable or the directory is not a repository. After injection, `App.init` uses these as fallback values when corresponding fields are omitted.
 pub fn injectMetadata(
     b: *std.Build,
     compile: *std.Build.Step.Compile,
@@ -89,6 +92,8 @@ pub fn injectMetadata(
 
     options.addOption([]const u8, "name", compile.name);
     options.addOption([]const u8, "version", manifestVersion(b) orelse "");
+    options.addOption([]const u8, "author_name", git.commitAuthor(b) orelse "");
+    options.addOption([]const u8, "author_email", git.commitEmail(b) orelse "");
     options.addOption([]const u8, "commit", git.extractCommit(b));
     options.addOption([]const u8, "branch", git.extractBranch(b));
     options.addOption([]const u8, "source_date", sourceDate(b));

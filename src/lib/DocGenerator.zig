@@ -47,6 +47,7 @@ pub const DocumentModel = struct {
     git_branch: []const u8 = "",
     git_commit: []const u8 = "",
     git_ref: []const u8,
+    source_date: []const u8 = "",
     app_name_attribute: []const u8,
     command_index: []const u8,
     root: CommandDoc,
@@ -199,6 +200,7 @@ const default_template =
     \\= {{ title }}
     \\{{ if author_name }}{{ author_name }}{{ if author_email }} <{{ author_email }}>{{ end }}
     \\{{ end }}{{ if version }}v{{ version }}{{ if git_ref }}: {{ git_ref }}{{ end }}
+    \\{{ end }}{{ if source_date }}:revdate: {{ source_date }}
     \\{{ end }}:app-name: {{ app_name_attribute }}
     \\:toc: auto
     \\:sectanchors:
@@ -320,7 +322,7 @@ fn buildDocumentModel(allocator: std.mem.Allocator, root: *const Command) !Docum
     const title = try std.fmt.allocPrint(allocator, "{s} CLI Reference", .{root.name});
     errdefer allocator.free(title);
 
-    const git_ref = try allocator.dupe(u8, "");
+    const git_ref = try gitRef(allocator, root.git_branch, root.git_commit);
     errdefer allocator.free(git_ref);
 
     const command_index = try buildCommandIndex(allocator, root, commands_flat);
@@ -333,12 +335,27 @@ fn buildDocumentModel(allocator: std.mem.Allocator, root: *const Command) !Docum
         .subtitle = root.description,
         .description = root.description,
         .version = root.version orelse "",
+        .author_name = root.author_name,
+        .author_email = root.author_email,
+        .git_branch = root.git_branch,
+        .git_commit = root.git_commit,
         .git_ref = git_ref,
+        .source_date = root.source_date,
         .app_name_attribute = root.name,
         .command_index = command_index,
         .root = if (commands_flat.len > 0) commands_flat[0] else CommandDoc.empty(),
         .commands_flat = commands_flat,
     };
+}
+
+fn gitRef(allocator: std.mem.Allocator, branch: []const u8, commit: []const u8) ![]u8 {
+    const has_branch = branch.len > 0;
+    const has_commit = commit.len > 0;
+
+    if (has_branch and has_commit) return std.fmt.allocPrint(allocator, "{s}@{s}", .{ branch, commit });
+    if (has_branch) return allocator.dupe(u8, branch);
+    if (has_commit) return allocator.dupe(u8, commit);
+    return allocator.dupe(u8, "");
 }
 
 fn collectCommandDoc(

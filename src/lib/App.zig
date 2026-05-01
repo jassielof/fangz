@@ -17,18 +17,28 @@ const ParseContext = @import("ParseContext.zig");
 const Parser = @import("Parser.zig");
 
 const App = @This();
-// TODO: These fields need doc comments
 
+/// Allocator used for app-owned parse state and command tree allocations.
 allocator: std.mem.Allocator,
+/// I/O context used by parsing, command execution, and generated output.
 io: std.Io,
+/// Root command for this application.
 root_command: Command,
+/// Most recent parse context retained for caller inspection.
 last_context: ?ParseContext = null,
+/// Process arguments owned by the app after `parseProcess`.
 owned_process_args: std.ArrayList([]const u8) = .empty,
+/// Whether the built-in completion command should be registered lazily.
 completions_enabled: bool = true,
+/// Whether the built-in completion command has already been registered.
 completion_registered: bool = false,
+/// Whether the built-in docs command should be registered lazily.
 docs_enabled: bool = true,
+/// Whether the built-in docs command has already been registered.
 docs_registered: bool = false,
+/// Short git commit hash shown by `--version`.
 commit: []const u8 = "",
+/// Git branch name shown by `--version`.
 branch: []const u8 = "",
 
 // TODO: This could be moved to its own struct file, and also renamed to init options or configuration as it's used for it in the initialization, Init itself is misleading.
@@ -37,10 +47,14 @@ pub const Init = struct {
     /// Binary name. Defaults to the executable name injected by `injectMeta` in the consumer's `build.zig`. Override to use a custom display name.
     name: ?[]const u8 = null,
     description: []const u8 = "",
-    // TODO: Aside from the version, since it helps the documentation generation, we can add more metadata, specially from the author, name and email, which can be inferred from either the manifest (build.zig.zon), manually added here, or injected with Git, as how the commit/branch is already injected. To not overdo it, I'll just allow a single author/email, otherwise I'm dealing with a lot of metadata fields, and that's what Git is, if the user wants to add multiple authors, to the AsciiDoc output, it's on them, either that or use a team/org name. 
     /// Semver string. Defaults to the version from the consumer's `build.zig.zon` injected by `injectMeta`. Pass an explicit value to override, or pass `""` to suppress the `--version` flag entirely.
     version: ?[]const u8 = null,
-    // TODO: Add source date, it'll first attempt to use the Git revision date (which is the commit date), and if that's not available, it'll fallback to the build date.
+    /// Author name used by generated documentation. Defaults to the Git author name injected by `injectMeta`.
+    author_name: ?[]const u8 = null,
+    /// Author email used by generated documentation. Defaults to the Git author email injected by `injectMeta`.
+    author_email: ?[]const u8 = null,
+    /// Source date used by generated documentation. Defaults to the injected Git commit date, falling back to the build date.
+    source_date: ?[]const u8 = null,
     /// Short git commit hash. Defaults to the injected value from `injectMeta`.
     /// Pass `""` to suppress from `--version` output.
     commit: ?[]const u8 = null,
@@ -63,6 +77,9 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: Init) FangzError!App 
         null;
     const commit = cfg.commit orelse meta.commit;
     const branch = cfg.branch orelse meta.branch;
+    const author_name = cfg.author_name orelse meta.author_name;
+    const author_email = cfg.author_email orelse meta.author_email;
+    const source_date = cfg.source_date orelse meta.source_date;
 
     return .{
         .allocator = allocator,
@@ -73,6 +90,11 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: Init) FangzError!App 
             .name = name,
             .description = cfg.description,
             .version = version,
+            .author_name = author_name,
+            .author_email = author_email,
+            .git_branch = branch,
+            .git_commit = commit,
+            .source_date = source_date,
         }),
     };
 }
