@@ -39,6 +39,7 @@ pub const DocumentModel = struct {
     binary_name: []const u8,
     display_name: []const u8,
     title: []const u8,
+    tagline: []const u8,
     subtitle: []const u8,
     description: []const u8,
     version: []const u8,
@@ -195,95 +196,11 @@ pub fn generateDocs(
     try writeFile(io, output_path, doc, options.overwrite);
 }
 
-// TODO: Move as a template file, instead of hardcoding.
-const default_template =
-    \\= {{ title }}
-    \\{{ if author_name }}{{ author_name }}{{ if author_email }} <{{ author_email }}>{{ end }}
-    \\{{ end }}{{ if version }}v{{ version }}{{ if git_ref }}: {{ git_ref }}{{ end }}
-    \\{{ end }}{{ if source_date }}:revdate: {{ source_date }}
-    \\{{ end }}:app-name: {{ app_name_attribute }}
-    \\:toc: auto
-    \\:sectanchors:
-    \\:sectlinks:
-    \\:doctype: book
-    \\
-    \\== Overview
-    \\
-    \\{{ if description }}{{ description }}{{ else }}Command line reference for `{{ display_name }}`.{{ end }}
-    \\
-    \\== Usage
-    \\
-    \\[source,sh]
-    \\----
-    \\{{ @raw root.usage }}
-    \\----
-    \\
-    \\{{ if root.has_positionals }}== Arguments
-    \\
-    \\{{ range root.positionals }}`{{ @raw display }}`::
-    \\{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
-    \\Required: {{ required_text }} +
-    \\Variadic: {{ variadic_text }}
-    \\{{ if has_possible_values }} +
-    \\Possible values: {{ join possible_values ", " }}{{ end }}
-    \\
-    \\{{ end }}{{ end }}{{ if root.has_options }}== Options
-    \\
-    \\{{ range root.options }}`{{ @raw full_signature }}`::
-    \\{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
-    \\Required: {{ required_text }}{{ if has_default }} +
-    \\Default: `{{ default_value }}`{{ end }}{{ if has_possible_values }} +
-    \\Possible values: {{ join possible_values ", " }}{{ end }} +
-    \\Scope: {{ scope }}
-    \\
-    \\{{ end }}{{ end }}== Command Index
-    \\
-    \\{{ @raw command_index }}
-    \\
-    \\== Command Reference
-    \\
-    \\{{ range commands_flat }}[#{{ anchor }}]
-    \\=== `{{ @raw display_path }}`
-    \\
-    \\{{ if description }}{{ description }}
-    \\{{ else }}No description.
-    \\{{ end }}{{ if long_description }}
-    \\{{ long_description }}
-    \\{{ end }}{{ if has_parent }}
-    \\Parent: xref:{{ parent_anchor }}[`{{ @raw parent_display_path }}`]
-    \\{{ end }}
-    \\==== Usage
-    \\
-    \\[source,sh]
-    \\----
-    \\{{ @raw usage }}
-    \\----
-    \\
-    \\{{ if has_positionals }}==== Arguments
-    \\
-    \\{{ range positionals }}`{{ @raw display }}`::
-    \\{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
-    \\Required: {{ required_text }} +
-    \\Variadic: {{ variadic_text }}
-    \\{{ if has_possible_values }} +
-    \\Possible values: {{ join possible_values ", " }}{{ end }}
-    \\
-    \\{{ end }}{{ end }}{{ if has_options }}==== Options
-    \\
-    \\{{ range options }}`{{ @raw full_signature }}`::
-    \\{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
-    \\Required: {{ required_text }}{{ if has_default }} +
-    \\Default: `{{ default_value }}`{{ end }}{{ if has_possible_values }} +
-    \\Possible values: {{ join possible_values ", " }}{{ end }} +
-    \\Scope: {{ scope }}
-    \\
-    \\{{ end }}{{ end }}{{ if has_subcommands }}==== Subcommands
-    \\
-    \\{{ range subcommands }}* xref:{{ anchor }}[`{{ @raw display_path }}`]{{ if description }} - {{ description }}{{ end }}
-    \\{{ end }}
-    \\{{ end }}
-    \\{{ end }}
-;
+// FIXME: Fangz is not a native module from docent so modules/fangz is wrong, the second line is fine, either that or relative to the file on which the function is reading the template, for example src/lib/DocGenerator.zig calls is and would use a "templates/cli.tmpl" instead, since both files are in the same src/lib directory, but that would break if the calling function is moved, so just src/lib/template/cli.tmpl is fine ig.
+const default_template_paths = [_][]const u8{
+    "modules/fangz/src/lib/templates/default.adoc",
+    "src/lib/templates/default.adoc",
+};
 
 fn renderSingleFile(
     allocator: std.mem.Allocator,
@@ -297,10 +214,17 @@ fn renderSingleFile(
     const template = if (options.template_path) |path|
         try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited)
     else
-        default_template;
-    defer if (options.template_path != null) allocator.free(template);
+        try readDefaultTemplate(io, allocator);
+    defer allocator.free(template);
 
     return trama.renderAlloc(allocator, template, model, .{ .escape_mode = .asciidoc });
+}
+
+fn readDefaultTemplate(io: std.Io, allocator: std.mem.Allocator) ![]u8 {
+    for (default_template_paths) |path| {
+        return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited) catch continue;
+    }
+    return error.FileNotFound;
 }
 
 fn buildDocumentModel(allocator: std.mem.Allocator, root: *const Command) !DocumentModel {
@@ -319,7 +243,11 @@ fn buildDocumentModel(allocator: std.mem.Allocator, root: *const Command) !Docum
         allocator.free(commands_flat);
     }
 
-    const title = try std.fmt.allocPrint(allocator, "{s} CLI Reference", .{root.name});
+    const display_name = if (root.display_name.len > 0) root.display_name else root.name;
+    const title = if (root.tagline.len > 0)
+        try std.fmt.allocPrint(allocator, "{s}: {s}", .{ display_name, root.tagline })
+    else
+        try allocator.dupe(u8, display_name);
     errdefer allocator.free(title);
 
     const git_ref = try gitRef(allocator, root.git_branch, root.git_commit);
@@ -330,8 +258,9 @@ fn buildDocumentModel(allocator: std.mem.Allocator, root: *const Command) !Docum
 
     return .{
         .binary_name = root.name,
-        .display_name = root.name,
+        .display_name = display_name,
         .title = title,
+        .tagline = root.tagline,
         .subtitle = root.description,
         .description = root.description,
         .version = root.version orelse "",
@@ -352,7 +281,7 @@ fn gitRef(allocator: std.mem.Allocator, branch: []const u8, commit: []const u8) 
     const has_branch = branch.len > 0;
     const has_commit = commit.len > 0;
 
-    if (has_branch and has_commit) return std.fmt.allocPrint(allocator, "{s}@{s}", .{ branch, commit });
+    if (has_branch and has_commit) return std.fmt.allocPrint(allocator, "{s} ({s})", .{ branch, commit });
     if (has_branch) return allocator.dupe(u8, branch);
     if (has_commit) return allocator.dupe(u8, commit);
     return allocator.dupe(u8, "");

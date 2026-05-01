@@ -1,0 +1,77 @@
+= {{ display_name }}{{ if tagline }}: {{ tagline }}{{ end }}
+{{ if author_name }}{{ author_name }}{{ if author_email }} <{{ author_email }}>{{ end }}
+{{ end }}{{ if version }}v{{ version }}{{ if source_date }}, {{ source_date }}{{ end }}{{ if git_ref }}: {{ git_ref }}{{ end }}
+{{ end }}:toc: auto
+:doctype: book
+
+{{ if description }}[abstract]
+--
+{{ description }}
+--
+
+{{ end }}== Usage
+
+[source,sh]
+----
+{{ @raw root.usage }}
+----
+
+{{ if root.has_positionals }}== Arguments
+
+{{ range root.positionals }}`{{ @raw display }}`::
+{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
+Required: {{ required_text }} +
+Variadic: {{ variadic_text }}{{ if has_possible_values }} +
+Possible values: {{ join possible_values ", " }}{{ end }}
+
+{{ end }}{{ end }}{{ if root.has_options }}== Options
+
+{{ range root.options }}`{{ @raw full_signature }}`::
+{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
+Required: {{ required_text }}{{ if has_default }} +
+Default: `{{ default_value }}`{{ end }}{{ if has_possible_values }} +
+Possible values: {{ join possible_values ", " }}{{ end }} +
+Scope: {{ scope }}
+
+{{ end }}{{ end }}== Command Reference
+
+{{ range commands_flat }}[#{{ anchor }}]
+=== `{{ @raw display_path }}`
+
+{{ if description }}{{ description }}
+{{ else }}No description.
+{{ end }}{{ if long_description }}
+{{ long_description }}
+{{ end }}{{ if has_parent }}
+Parent: xref:{{ parent_anchor }}[`{{ @raw parent_display_path }}`]
+{{ end }}
+==== Usage
+
+[source,sh]
+----
+{{ @raw usage }}
+----
+
+{{ if has_positionals }}==== Arguments
+
+{{ range positionals }}`{{ @raw display }}`::
+{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
+Required: {{ required_text }} +
+Variadic: {{ variadic_text }}{{ if has_possible_values }} +
+Possible values: {{ join possible_values ", " }}{{ end }}
+
+{{ end }}{{ end }}{{ if has_options }}==== Options
+
+{{ range options }}`{{ @raw full_signature }}`::
+{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
+Required: {{ required_text }}{{ if has_default }} +
+Default: `{{ default_value }}`{{ end }}{{ if has_possible_values }} +
+Possible values: {{ join possible_values ", " }}{{ end }} +
+Scope: {{ scope }}
+
+{{ end }}{{ end }}{{ if has_subcommands }}==== Subcommands
+
+{{ range subcommands }}* xref:{{ anchor }}[`{{ @raw display_path }}`]{{ if description }} - {{ description }}{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
