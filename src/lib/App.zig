@@ -41,31 +41,10 @@ commit: []const u8 = "",
 /// Git branch name shown by `--version`.
 branch: []const u8 = "",
 
-// TODO: This could be moved to its own struct file, and also renamed to init options or configuration as it's used for it in the initialization, Init itself is misleading.
-pub const Init = struct {
-    /// Human-friendly name used by generated documentation. Defaults to the injected executable name.
-    display_name: ?[]const u8 = null,
-    /// Short subtitle rendered after the display name in generated documentation.
-    tagline: []const u8 = "",
-    description: []const u8 = "",
-    /// Semver string. Defaults to the version from the consumer's `build.zig.zon` injected by `injectMeta`. Pass an explicit value to override, or pass `""` to suppress the `--version` flag entirely.
-    version: ?[]const u8 = null,
-    /// Author name used by generated documentation. Defaults to the Git author name injected by `injectMeta`.
-    author_name: ?[]const u8 = null,
-    /// Author email used by generated documentation. Defaults to the Git author email injected by `injectMeta`.
-    author_email: ?[]const u8 = null,
-    /// Source date used by generated documentation. Defaults to the injected Git commit date, falling back to the build date.
-    source_date: ?[]const u8 = null,
-    /// Short git commit hash. Defaults to the injected value from `injectMeta`.
-    /// Pass `""` to suppress from `--version` output.
-    commit: ?[]const u8 = null,
-    /// Git branch name. Defaults to the injected value from `injectMeta`.
-    /// Pass `""` to suppress from `--version` output.
-    branch: ?[]const u8 = null,
-};
+pub const AppOptions = @import("AppOptions.zig");
 
 /// Constructs an application with a root command.
-pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: Init) Error!App {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: AppOptions) Error!App {
     prepareConsole();
 
     // Fall back to build-injected meta when fields are absent.
