@@ -3,9 +3,9 @@ const std = @import("std");
 const git = @import("git.build.zig");
 
 const PartialManifest = struct {
-    version: []const u8,
-    description: []const u8,
-    author: []const u8,
+    version: []const u8 = "",
+    description: []const u8 = "",
+    author: []const u8 = "",
 };
 
 pub fn sourceDate(b: *std.Build) []const u8 {
@@ -57,7 +57,12 @@ pub fn manifestVersion(b: *std.Build) ?[]const u8 {
     ) catch return null;
     defer std.zon.parse.free(b.allocator, manifest);
 
-    return b.dupe(manifest.version);
+    return if (manifest.version.len > 0) b.dupe(manifest.version) else null;
+}
+
+fn compileVersion(b: *std.Build, compile: *std.Build.Step.Compile) ?[]const u8 {
+    const version = compile.version orelse return null;
+    return b.fmt("{f}", .{version});
 }
 
 /// Injects the consumer's binary name, manifest version, and current git metadata into the fangz library module as a `fangz_meta` options module, making them available as defaults inside `App.init`.
@@ -74,8 +79,8 @@ pub fn manifestVersion(b: *std.Build) ?[]const u8 {
 ///
 /// Injected fields:
 ///
-/// - `name`: `compile.name` (the executable name)
-/// - `version`: extracted from the consumer's `build.zig.zon`
+/// - `name`: `compile.name` (the executable name from `b.addExecutable`, used as the CLI command name)
+/// - `version`: `compile.version` from `b.addExecutable` when present, otherwise the consumer's `build.zig.zon` version
 /// - `author_name`: git author name for `HEAD`
 /// - `author_email`: git author email for `HEAD`
 /// - `commit`: short git commit hash (`git rev-parse --short HEAD`)
@@ -91,7 +96,7 @@ pub fn injectMetadata(
     const options = b.addOptions();
 
     options.addOption([]const u8, "name", compile.name);
-    options.addOption([]const u8, "version", manifestVersion(b) orelse "");
+    options.addOption([]const u8, "version", compileVersion(b, compile) orelse manifestVersion(b) orelse "");
     options.addOption([]const u8, "author_name", git.commitAuthor(b) orelse "");
     options.addOption([]const u8, "author_email", git.commitEmail(b) orelse "");
     options.addOption([]const u8, "commit", git.extractCommit(b));
