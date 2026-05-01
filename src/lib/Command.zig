@@ -274,6 +274,10 @@ pub const Hooks = struct {
 
 pub const Init = struct {
     name: []const u8,
+    /// Human-friendly display name used by generated documentation.
+    display_name: []const u8 = "",
+    /// Short tagline rendered after the display name in generated documentation.
+    tagline: []const u8 = "",
     /// One-line summary shown in `-h` and `--help` output.
     description: []const u8 = "",
     /// Extended description shown only in `--help` output.
@@ -295,6 +299,10 @@ pub const Init = struct {
 allocator: Allocator,
 parent: ?*Command = null,
 name: []const u8,
+/// Human-friendly display name used by generated documentation.
+display_name: []const u8,
+/// Short tagline rendered after the display name in generated documentation.
+tagline: []const u8,
 /// One-line summary shown in `-h` and `--help` output.
 description: []const u8,
 /// Extended description shown only in `--help` output.
@@ -335,6 +343,8 @@ pub fn init(allocator: Allocator, cfg: Init) !Command {
     return .{
         .allocator = allocator,
         .name = cfg.name,
+        .display_name = cfg.display_name,
+        .tagline = cfg.tagline,
         .description = cfg.description,
         .long_description = cfg.long_description,
         .version = cfg.version,

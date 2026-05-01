@@ -43,9 +43,10 @@ branch: []const u8 = "",
 
 // TODO: This could be moved to its own struct file, and also renamed to init options or configuration as it's used for it in the initialization, Init itself is misleading.
 pub const Init = struct {
-    // TODO: Aside from the name, it would be nice to add a pretty name, instead of just binary/cli/terminal name, obviously optional, as well a subtitle or tagline, which is mostly used for the documentation generation, for example, for docent's case, "Docent: A documentation linter for Zig", where "Docent" is the pretty name (capitalized), and the rest from the colon onwards is the subtitle/tagline.
-    /// Binary name. Defaults to the executable name injected by `injectMeta` in the consumer's `build.zig`. Override to use a custom display name.
-    name: ?[]const u8 = null,
+    /// Human-friendly name used by generated documentation. Defaults to the injected executable name.
+    display_name: ?[]const u8 = null,
+    /// Short subtitle rendered after the display name in generated documentation.
+    tagline: []const u8 = "",
     description: []const u8 = "",
     /// Semver string. Defaults to the version from the consumer's `build.zig.zon` injected by `injectMeta`. Pass an explicit value to override, or pass `""` to suppress the `--version` flag entirely.
     version: ?[]const u8 = null,
@@ -68,7 +69,8 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: Init) FangzError!App 
     prepareConsole();
 
     // Fall back to build-injected meta when fields are absent.
-    const name = cfg.name orelse meta.name;
+    const name = meta.name;
+    const display_name = cfg.display_name orelse meta.name;
     const version: ?[]const u8 = if (cfg.version) |v|
         (if (v.len > 0) v else null)
     else if (meta.version.len > 0)
@@ -88,6 +90,8 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: Init) FangzError!App 
         .branch = branch,
         .root_command = try Command.init(allocator, .{
             .name = name,
+            .display_name = display_name,
+            .tagline = cfg.tagline,
             .description = cfg.description,
             .version = version,
             .author_name = author_name,
