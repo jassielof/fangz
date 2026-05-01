@@ -2,7 +2,7 @@
 //!
 //! Fangz converts the parser/runtime command tree into a render-friendly documentation model, then renders a single AsciiDoc file with Trama.
 
-// TODO: Move a lot of this into the docs directory, and use file-based structs.
+// TODO: Move a lot of this into the docs directory or something much better called, and use file-based structs. For better organization.
 const std = @import("std");
 
 const trama = @import("trama");
