@@ -1,8 +1,6 @@
 //! High-level application orchestrator for Fangz.
 //!
-//! `App` owns the root command tree, parses argv input, executes hook
-//! lifecycles, and provides convenience helpers for help, errors, completions,
-//! and documentation generation.
+//! `App` owns the root command tree, parses argv input, executes hook lifecycles, and provides convenience helpers for help, errors, completions, and documentation generation.
 
 const std = @import("std");
 
@@ -19,6 +17,7 @@ const ParseContext = @import("ParseContext.zig");
 const Parser = @import("Parser.zig");
 
 const App = @This();
+// TODO: These fields need doc comments
 
 allocator: std.mem.Allocator,
 io: std.Io,
@@ -32,15 +31,16 @@ docs_registered: bool = false,
 commit: []const u8 = "",
 branch: []const u8 = "",
 
+// TODO: This could be moved to its own struct file, and also renamed to init options or configuration as it's used for it in the initialization, Init itself is misleading.
 pub const Init = struct {
-    /// Binary name. Defaults to the executable name injected by `injectMeta`
-    /// in the consumer's `build.zig`. Override to use a custom display name.
+    // TODO: Aside from the name, it would be nice to add a pretty name, instead of just binary/cli/terminal name, obviously optional, as well a subtitle or tagline, which is mostly used for the documentation generation, for example, for docent's case, "Docent: A documentation linter for Zig", where "Docent" is the pretty name (capitalized), and the rest from the colon onwards is the subtitle/tagline.
+    /// Binary name. Defaults to the executable name injected by `injectMeta` in the consumer's `build.zig`. Override to use a custom display name.
     name: ?[]const u8 = null,
     description: []const u8 = "",
-    /// Semver string. Defaults to the version from the consumer's
-    /// `build.zig.zon` injected by `injectMeta`. Pass an explicit value to
-    /// override, or pass `""` to suppress the `--version` flag entirely.
+    // TODO: Aside from the version, since it helps the documentation generation, we can add more metadata, specially from the author, name and email, which can be inferred from either the manifest (build.zig.zon), manually added here, or injected with Git, as how the commit/branch is already injected. To not overdo it, I'll just allow a single author/email, otherwise I'm dealing with a lot of metadata fields, and that's what Git is, if the user wants to add multiple authors, to the AsciiDoc output, it's on them, either that or use a team/org name. 
+    /// Semver string. Defaults to the version from the consumer's `build.zig.zon` injected by `injectMeta`. Pass an explicit value to override, or pass `""` to suppress the `--version` flag entirely.
     version: ?[]const u8 = null,
+    // TODO: Add source date, it'll first attempt to use the Git revision date (which is the commit date), and if that's not available, it'll fallback to the build date.
     /// Short git commit hash. Defaults to the injected value from `injectMeta`.
     /// Pass `""` to suppress from `--version` output.
     commit: ?[]const u8 = null,
@@ -145,6 +145,7 @@ pub fn executeFrom(self: *App, argv: []const []const u8) anyerror!void {
     }
 
     const ctx = self.parseFrom(argv) catch |err| {
+        // TODO: Review if this is really necessary and it's not just boilerplate, I feel it could maybe be shortened or even omitted? it looks really unnecessary.
         const parse_err: ?Parser.ParseError = switch (err) {
             error.UnknownFlag => error.UnknownFlag,
             error.UnknownCommand => error.UnknownCommand,
@@ -164,25 +165,31 @@ pub fn executeFrom(self: *App, argv: []const []const u8) anyerror!void {
             error.MutuallyExclusiveFlags => error.MutuallyExclusiveFlags,
             else => null,
         };
+
         if (parse_err) |pe| {
             var diag = try Parser.diagnoseError(self.allocator, self.root(), argv, pe);
             defer diag.deinit();
             try self.printError(diag.message, diag.hint);
         }
+
         return err;
     };
+
     if (ctx.help_requested) {
         try self.printHelp(ctx.command);
         return;
     }
+
     if (ctx.short_help_requested) {
         try self.printShortHelp(ctx.command);
         return;
     }
+
     if (ctx.version_requested) {
         try self.printVersion();
         return;
     }
+
     try self.runHooks(ctx);
 }
 
@@ -265,6 +272,7 @@ pub fn printError(self: *App, message: []const u8, hint: ?[]const u8) !void {
         try carnaval.Style.init().fg(.{ .ansi16 = .yellow }).renderWithProfile("hint:", &err_writer.interface, profile);
         try err_writer.interface.print(" {s}\n", .{h});
     }
+
     try err_writer.interface.flush();
 }
 
@@ -276,26 +284,29 @@ fn runHooks(self: *App, ctx: *ParseContext) !void {
     for (chain.items) |cmd| {
         if (cmd.hooks.persistent_pre_run) |f| try f(ctx);
     }
+
     if (ctx.command.hooks.pre_run) |f| try f(ctx);
     if (ctx.command.hooks.run) |f| try f(ctx);
     if (ctx.command.hooks.post_run) |f| try f(ctx);
 
     var i = chain.items.len;
+
     while (i > 0) : (i -= 1) {
         const cmd = chain.items[i - 1];
         if (cmd.hooks.persistent_post_run) |f| try f(ctx);
     }
 }
 
-/// Prints root command version to stdout.
+/// Prints the root command version to the standard output.
 ///
-/// Output format:
-/// - `0.1.0 (main@abc1234)` — version + branch + commit
-/// - `0.1.0 (abc1234)`      — version + commit only
-/// - `0.1.0 (main)`         — version + branch only
-/// - `0.1.0`                — version only
-/// - `main@abc1234`         — git info only (no version set)
-/// - nothing                — no version and no git info
+/// Output formats:
+///
+/// - `0.1.0 (main@abc1234)` (default): version + branch + commit
+/// - `0.1.0 (abc1234)`: version + commit only
+/// - `0.1.0 (main)`: version + branch only
+/// - `0.1.0`: version only
+/// - `main@abc1234`: git info only (no version set)
+/// - nothing: no version and no git info
 fn printVersion(self: *App) !void {
     prepareConsole();
     const version = self.root().version;

@@ -1,11 +1,10 @@
 //! Lightweight argv tokenizer used by the parser.
 //!
-//! The tokenizer classifies raw tokens into short/long flag, positional, and
-//! terminator (`--`) categories while tracking terminator state.
-
-const Tokenizer = @This();
+//! The tokenizer classifies raw tokens into short/long flag, positional, and terminator (`--`) categories while tracking terminator state.
 
 const std = @import("std");
+
+const Tokenizer = @This();
 
 argv: []const []const u8,
 cursor: usize = 0,
@@ -39,8 +38,10 @@ pub fn next(self: *Tokenizer) ?Token {
         self.after_terminator = true;
         return .{ .kind = .terminator, .raw = raw };
     }
+
     if (std.mem.startsWith(u8, raw, "--") and raw.len > 2) return .{ .kind = .long_flag, .raw = raw };
     if (std.mem.startsWith(u8, raw, "-") and raw.len > 1) return .{ .kind = .short_flag, .raw = raw };
+
     return .{ .kind = .positional, .raw = raw };
 }
 

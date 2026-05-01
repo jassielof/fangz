@@ -20,6 +20,7 @@ pub fn closest(needle: []const u8, candidates: []const []const u8) ?[]const u8 {
         const threshold = if (needle.len <= 4) @as(usize, 1) else @max(@as(usize, 2), needle.len / 3);
         if (best_score <= threshold) return best;
     }
+
     return null;
 }
 
@@ -36,6 +37,7 @@ fn levenshtein(a: []const u8, b: []const u8) usize {
 
     prev.append(alloc, 0) catch return std.math.maxInt(usize);
     var j: usize = 0;
+
     while (j < b.len) : (j += 1) {
         prev.append(alloc, j + 1) catch return std.math.maxInt(usize);
     }
@@ -58,5 +60,6 @@ fn levenshtein(a: []const u8, b: []const u8) usize {
         prev = curr;
         curr = tmp;
     }
+
     return prev.items[b.len];
 }

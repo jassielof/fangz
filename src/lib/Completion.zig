@@ -19,58 +19,15 @@
 //! - For `key_value_list` flags: `--name=<key>=` candidates from `allowed_keys`.
 //! - For `key_value_list` flags after `--name=<key>=`: `--name=<key>=<value>` candidates from `allowed_values`.
 
-// TODO: Move this to a shells directory, and also move each respective shell completion step into its own file.
+// TODO: Move this to a shells or completions directory, and also move each respective shell completion step into its own file.
+// FIXME: Solve cyclomatic complexity issues.
 
 const std = @import("std");
 
 const Command = @import("Command.zig");
 const ParseContext = @import("ParseContext.zig");
-
-/// Supported shell targets for completion script generation.
-pub const Shell = enum {
-    /// <https://www.gnu.org/software/bash/>
-    bash,
-    /// <https://www.zsh.org/>
-    zsh,
-    /// <https://fishshell.com/>
-    fish,
-    /// <https://www.microsoft.com/PowerShell>
-    pwsh,
-    /// <https://www.nushell.sh/>
-    nu,
-
-    /// Returns the human-friendly name of the shell.
-    pub fn toPrettyName(self: Shell) []const u8 {
-        return switch (self) {
-            .bash => "Bash",
-            .zsh => "Zsh",
-            .fish => "Fish",
-            .pwsh => "PowerShell",
-            .nu => "Nushell",
-        };
-    }
-
-    /// Returns the string name of the shell, based off the enum tag.
-    pub fn toStringName(self: Shell) []const u8 {
-        return @tagName(self);
-    }
-
-    /// Returns a list of allowed string values for the Shell enum.
-    pub fn allowedValues() []const []const u8 {
-        return comptime blk: {
-            const fields = @typeInfo(Shell).@"enum".fields;
-            var values: [fields.len][]const u8 = undefined;
-
-            for (fields, 0..) |field, i| {
-                values[i] = field.name;
-            }
-
-            const final = values;
-
-            break :blk &final;
-        };
-    }
-};
+const shells = @import("shells/root.zig");
+pub const Shell = shells.Shell;
 
 /// Returns the pretty display label for each `Shell` variant, in the same order as `Shell.allowedValues()`.
 fn shellAllowedValueLabels() []const []const u8 {
@@ -124,6 +81,7 @@ pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8) !voi
     var buf: [8192]u8 = undefined;
     var out = std.Io.File.stdout().writer(io, &buf);
     const w = &out.interface;
+
     if (std.mem.eql(u8, shell, "bash")) {
         try renderBash(w, root.name);
     } else if (std.mem.eql(u8, shell, "zsh")) {
@@ -137,6 +95,7 @@ pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8) !voi
     } else {
         return error.InvalidEnumValue;
     }
+
     try out.interface.flush();
 }
 
@@ -274,6 +233,7 @@ fn suggestFlagValues(
                 }
             }
         }
+
         return;
     }
 
@@ -297,12 +257,14 @@ fn flagExpectsValue(cmd: *const Command, token: []const u8) bool {
         }
         return false;
     }
+
     if (std.mem.startsWith(u8, token, "-") and token.len == 2) {
         const short = token[1];
         if (cmd.resolveFlagByShort(short)) |lookup| {
             return lookup.command.flags.constSlice()[lookup.index].takesValue();
         }
     }
+
     return false;
 }
 
@@ -375,9 +337,14 @@ fn collectNuCompleters(cmd: *const Command, out: *std.ArrayList(Command.NuComple
     }
 }
 
+// TODO: This should be moved into its own file. And as well rename to not static, as I learnt that static/dynamic are complementary, not different. As well add reference links.
+// The main reference seems to be <https://www.nushell.sh/book/custom_completions.html>.
+//
 /// Emits static Nushell `extern` module for command tree.
+// FIXME: the writer should be the respective type of the new Writergate interface, not anytype. This should be reviewed also in all the project's codebase. Same in the `printNuFlag` function.
 fn renderNuStatic(w: anytype, root: *const Command, path: []const u8, is_root: bool) !void {
     if (is_root) {
+        // I could maybe make use of my Trama library to make it more ergonomic.
         try w.print("module completions {{\n\n", .{});
 
         // Collect and emit all unique user-supplied Nushell custom completers.

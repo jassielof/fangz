@@ -1,6 +1,8 @@
 const std = @import("std");
 
 const git = @import("git.build.zig");
+const metadata = @import("metadata.build.zig");
+pub const injectMetadata = metadata.injectMeta;
 
 pub fn build(b: *std.Build) void {
     const mod_name = "fangz";
@@ -8,13 +10,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const carnaval_dep = b.dependency("carnaval", .{});
+    const carnaval = b.dependency("carnaval", .{});
 
-    const carnaval_mod = carnaval_dep.module("carnaval");
-    const trama_dep = b.dependency("trama", .{});
-    const trama_mod = trama_dep.module("trama");
+    const trama = b.dependency("trama", .{});
 
-    const libary_module = b.addModule(
+    const mod = b.addModule(
         mod_name,
         .{
             .root_source_file = b.path("src/lib/root.zig"),
@@ -23,11 +23,11 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{
                     .name = "carnaval",
-                    .module = carnaval_mod,
+                    .module = carnaval.module("carnaval"),
                 },
                 .{
                     .name = "trama",
-                    .module = trama_mod,
+                    .module = trama.module("trama"),
                 },
             },
         },
@@ -35,21 +35,24 @@ pub fn build(b: *std.Build) void {
 
     // Provide default fangz_meta so the library compiles standalone (e.g. for fangz's own test suite). Consumers who call injectMeta() will overwrite this with their own values.
     const default_meta = b.addOptions();
+
     default_meta.addOption([]const u8, "name", mod_name);
-    default_meta.addOption([]const u8, "version", extractVersion(b) orelse "");
+    default_meta.addOption([]const u8, "version", metadata.manifestVersion(b) orelse "");
     default_meta.addOption([]const u8, "commit", "");
     default_meta.addOption([]const u8, "branch", "");
-    libary_module.addOptions("fangz_meta", default_meta);
+    default_meta.addOption([]const u8, "source_date", metadata.sourceDate(b));
+
+    mod.addOptions("fangz_meta", default_meta);
 
     const docs_step = b.step("docs", "Generate the documentation");
 
-    const documentation_library = b.addLibrary(.{
+    const mod_lib = b.addLibrary(.{
         .name = mod_name,
-        .root_module = libary_module,
+        .root_module = mod,
     });
 
     const docs = b.addInstallDirectory(.{
-        .source_dir = documentation_library.getEmittedDocs(),
+        .source_dir = mod_lib.getEmittedDocs(),
         .install_dir = .prefix,
         .install_subdir = "docs",
     });
@@ -60,7 +63,7 @@ pub fn build(b: *std.Build) void {
 
     const unit_tests = b.addTest(.{
         .name = "Unit Tests",
-        .root_module = libary_module,
+        .root_module = mod,
     });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
@@ -74,62 +77,11 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{.{
                 .name = mod_name,
-                .module = libary_module,
+                .module = mod,
             }},
         }),
     });
 
     const run_integration_tests = b.addRunArtifact(integration_tests);
     test_step.dependOn(&run_integration_tests.step);
-}
-
-/// Injects the consumer's binary name, manifest version, and current git commit/branch into the fangz library module as a `fangz_meta` options module, making them available as defaults inside `App.init`.
-///
-/// Call this from your `build.zig` after resolving the fangz dependency:
-///
-/// ```zig
-/// const fangz_dep = b.dependency("fangz", .{ .target = target, .optimize = optimize });
-/// const fangz_mod = fangz_dep.module("fangz");
-/// // wire fangz_mod into your executable's imports as usual, then:
-/// const fangz_build = @import("fangz"); // imports fangz's build.zig
-/// fangz_build.injectMeta(b, exe, fangz_mod);
-/// ```
-///
-/// Injected fields:
-/// - `name`: `compile.name` (the executable name)
-/// - `version`: extracted from the consumer's `build.zig.zon`
-/// - `commit`: short git commit hash (`git rev-parse --short HEAD`)
-/// - `branch`: current git branch (`git rev-parse --abbrev-ref HEAD`)
-///
-/// Git fields fall back to `""` when git is unavailable or the directory is not a repository. After injection, `App.init` uses these as fallback values when `.name`, `.version`, `.commit`, or `.branch` are omitted.
-pub fn injectMeta(
-    b: *std.Build,
-    compile: *std.Build.Step.Compile,
-    fangz_mod: *std.Build.Module,
-) void {
-    const options = b.addOptions();
-    options.addOption([]const u8, "name", compile.name);
-    options.addOption([]const u8, "version", extractVersion(b) orelse "");
-    options.addOption([]const u8, "commit", git.extractCommit(b));
-    options.addOption([]const u8, "branch", git.extractBranch(b));
-    // Overwrite the default fangz_meta that fangz's own build() set up.
-    fangz_mod.addOptions("fangz_meta", options);
-}
-
-fn extractVersion(b: *std.Build) ?[]const u8 {
-    var io_impl: std.Io.Threaded = .init(b.allocator, .{});
-    defer io_impl.deinit();
-
-    const io = io_impl.io();
-    const content = b.build_root.handle.readFileAlloc(
-        io,
-        "build.zig.zon",
-        b.allocator,
-        .unlimited,
-    ) catch return null;
-    const marker = ".version = \"";
-    const start = std.mem.indexOf(u8, content, marker) orelse return null;
-    const after = content[start + marker.len ..];
-    const end = std.mem.findScalar(u8, after, '"') orelse return null;
-    return b.dupe(after[0..end]);
 }

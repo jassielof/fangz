@@ -1,8 +1,6 @@
 //! Core command tree model for Fangz.
 //!
-//! This module defines commands, flags, positional arguments, hook wiring, and
-//! parent/child relationships used by parsing, help rendering, completions, and
-//! documentation generation.
+//! This module defines commands, flags, positional arguments, hook wiring, and parent/child relationships used by parsing, help rendering, completions, and documentation generation.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -17,9 +15,7 @@ pub const MAX_INLINE_FLAGS = 32;
 
 /// Fixed-capacity inline array of Flag descriptors.
 ///
-/// Stores all flag metadata directly inside the Command struct — no heap
-/// allocation is needed for CLIs with ≤ MAX_INLINE_FLAGS flags per command.
-/// The API mirrors the subset of `std.BoundedArray` used by this module.
+/// Stores all flag metadata directly inside the Command struct — no heap allocation is needed for CLIs with ≤ MAX_INLINE_FLAGS flags per command. The API mirrors the subset of `std.BoundedArray` used by this module.
 pub const FlagArray = struct {
     buffer: [MAX_INLINE_FLAGS]Flag = undefined,
     len: usize = 0,
@@ -78,6 +74,7 @@ pub const Flag = struct {
     short: ?u8 = null,
     /// One-line summary shown in both `-h` and `--help` output.
     description: []const u8 = "",
+    // TODO: Long description feels ugly, description itself for the short help is fine, but for something longer than a description, there might be a better word to describe it. A single word. A better pair I was thinking is "Brief" for short help and "Description" for long help.
     /// Extended description shown only in `--help` output.
     long_description: []const u8 = "",
     value_type: FlagType = .bool,
@@ -119,6 +116,7 @@ fn isStringSlice(comptime T: type) bool {
     if (info != .pointer) return false;
     const ptr = info.pointer;
     if (ptr.size != .slice) return false;
+
     return ptr.child == u8 and ptr.is_const;
 }
 
@@ -127,6 +125,7 @@ fn isStringListType(comptime T: type) bool {
     if (info != .pointer) return false;
     const ptr = info.pointer;
     if (ptr.size != .slice or !ptr.is_const) return false;
+
     return isStringSlice(ptr.child);
 }
 
@@ -135,6 +134,7 @@ fn isKeyValueListType(comptime T: type) bool {
     if (info != .pointer) return false;
     const ptr = info.pointer;
     if (ptr.size != .slice or !ptr.is_const) return false;
+
     return ptr.child == KeyValuePair;
 }
 
@@ -151,6 +151,7 @@ fn typeToFlagType(comptime T: type) FlagType {
 
 pub fn FlagOptions(comptime T: type) type {
     const Base = unwrapOptional(T);
+
     return struct {
         name: []const u8,
         short: ?u8 = null,
@@ -176,6 +177,7 @@ pub fn FlagOptions(comptime T: type) type {
 
 fn EnumTagNameTable(comptime EnumType: type) type {
     const info = @typeInfo(EnumType);
+
     if (info != .@"enum") {
         @compileError("addEnumFlag expects an enum type");
     }
@@ -194,6 +196,7 @@ fn EnumTagNameTable(comptime EnumType: type) type {
 
 fn EnumTagValueTable(comptime EnumType: type) type {
     const info = @typeInfo(EnumType);
+
     if (info != .@"enum") {
         @compileError("enum value table expects an enum type");
     }
@@ -202,9 +205,11 @@ fn EnumTagValueTable(comptime EnumType: type) type {
         pub const values = blk: {
             const fields = info.@"enum".fields;
             var enum_values: [fields.len]u32 = undefined;
+
             for (fields, 0..) |field, i| {
                 enum_values[i] = @intCast(field.value);
             }
+
             break :blk enum_values;
         };
     };
@@ -212,9 +217,8 @@ fn EnumTagValueTable(comptime EnumType: type) type {
 
 /// A user-supplied Nushell custom completer that can be attached to a positional argument.
 ///
-/// `name` becomes both the `def` name and the `@name` reference in the `extern` signature.
-/// `body` is the single expression (or newline-separated statements) that forms the
-/// body of the generated `def <name> [] { <body> }` block.
+/// - `name` becomes both the `def` name and the `@name` reference in the `extern` signature.
+/// - `body` is the single expression (or newline-separated statements) that forms the body of the generated `def <name> [] { <body> }` block.
 ///
 /// Example — complete only YAML files:
 /// ```zig
@@ -364,6 +368,7 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
     const value_type = comptime typeToFlagType(Base);
 
     if (isOptional(T) and opts.default != null) return error.InvalidFlagConfiguration;
+
     if (opts.multi and value_type != .string_list and value_type != .key_value_list) {
         return error.InvalidFlagConfiguration;
     }
@@ -408,6 +413,7 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
     if (flag.short) |short| {
         if (self.flag_by_short.contains(short)) return error.DuplicateFlag;
     }
+
     const idx = self.flags.len;
     self.flags.append(flag) catch return error.TooManyFlags;
     try self.flag_by_name.put(flag.name, idx);
@@ -418,9 +424,11 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
 pub fn addFlagDescriptor(self: *Command, flag: Flag) !void {
     if (self.frozen) return error.FrozenCommand;
     if (self.flag_by_name.contains(flag.name)) return error.DuplicateFlag;
+
     if (flag.short) |short| {
         if (self.flag_by_short.contains(short)) return error.DuplicateFlag;
     }
+
     const idx = self.flags.len;
     self.flags.append(flag) catch return error.TooManyFlags;
     try self.flag_by_name.put(flag.name, idx);
@@ -430,14 +438,17 @@ pub fn addFlagDescriptor(self: *Command, flag: Flag) !void {
 /// Appends a positional argument definition to this command.
 pub fn addPositional(self: *Command, positional: Positional) !void {
     if (self.frozen) return error.FrozenCommand;
+
     if (positional.variadic and self.positionals.items.len != 0) {
         if (self.positionals.items[self.positionals.items.len - 1].variadic) {
             return error.MultipleVariadicPositionals;
         }
     }
+
     if (self.positionals.items.len > 0 and self.positionals.items[self.positionals.items.len - 1].variadic) {
         return error.VariadicMustBeLast;
     }
+
     try self.positionals.append(self.allocator, positional);
 }
 
@@ -475,10 +486,8 @@ pub fn setHelpOnEmptyArgs(self: *Command, enabled: bool) void {
 
 /// Marks this command tree as frozen.
 ///
-/// Populates subcommand alias lookup tables then sets `frozen = true` on every
-/// node, preventing further structural mutations (addFlag, addSubcommand, …).
-/// Called automatically by `App.executeFrom` / `App.parseFrom` before parsing
-/// begins.  It is safe to call multiple times; subsequent calls are no-ops.
+/// Populates subcommand alias lookup tables then sets `frozen = true` on every node, preventing further structural mutations (addFlag, addSubcommand, …).
+/// Called automatically by `App.executeFrom` / `App.parseFrom` before parsing begins. It is safe to call multiple times; subsequent calls are no-ops.
 pub fn freeze(self: *Command) !void {
     if (self.frozen) return;
     try self.bindAliases();
@@ -492,8 +501,7 @@ fn setFrozenRecursive(self: *Command) void {
 
 /// Returns true when this command has any user-visible options.
 ///
-/// Shared by HelpRenderer and DocGenerator to determine whether `[OPTIONS]`
-/// appears in the usage line, ensuring both renderers use identical logic.
+/// Shared by HelpRenderer and DocGenerator to determine whether `[OPTIONS]` appears in the usage line, ensuring both renderers use identical logic.
 pub fn hasAnyOptions(self: *const Command) bool {
     if (self.flags.len > 0) return true;
     if (self.rootConst().version != null) return true;
@@ -570,16 +578,20 @@ pub fn bindAliases(self: *Command) !void {
 pub fn collectAncestorPath(self: *const Command, allocator: Allocator) !std.ArrayList(*const Command) {
     var reversed = try std.ArrayList(*const Command).initCapacity(allocator, 8);
     var current: ?*const Command = self;
+
     while (current) |cmd| : (current = cmd.parent) {
         try reversed.append(allocator, cmd);
     }
 
     var ordered = try std.ArrayList(*const Command).initCapacity(allocator, reversed.items.len);
     var i: usize = reversed.items.len;
+
     while (i > 0) : (i -= 1) {
         try ordered.append(allocator, reversed.items[i - 1]);
     }
+
     reversed.deinit(allocator);
+
     return ordered;
 }
 

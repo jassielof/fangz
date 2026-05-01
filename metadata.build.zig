@@ -1,0 +1,99 @@
+const std = @import("std");
+
+const git = @import("git.build.zig");
+
+const PartialManifest = struct {
+    name: @EnumLiteral(),
+    version: []const u8,
+    description: []const u8,
+    author: []const u8,
+};
+
+pub fn sourceDate(b: *std.Build) []const u8 {
+    return git.commitDate(b) orelse buildDate(b);
+}
+
+pub fn buildDate(b: *std.Build) []const u8 {
+    const now = std.Io.Timestamp.now(b.graph.io, .real);
+    const seconds: usize = @intCast(now.toSeconds());
+
+    const epoch_seconds: std.time.epoch.EpochSeconds = .{
+        .secs = seconds,
+    };
+
+    const year_day = epoch_seconds.getEpochDay().calculateYearDay();
+    const month_day = year_day.calculateMonthDay();
+
+    return b.fmt("{d:0>4}-{d:0>2}-{d:0>2}", .{
+        year_day.year,
+        month_day.month.numeric(),
+        month_day.day_index + 1,
+    });
+}
+
+pub fn manifestVersion(b: *std.Build) ?[]const u8 {
+    const content = b.build_root.handle.readFileAlloc(
+        b.graph.io,
+        "build.zig.zon",
+        b.allocator,
+        .unlimited,
+    ) catch return null;
+    defer b.allocator.free(content);
+
+    const source = b.allocator.dupeZ(u8, content) catch return null;
+    defer b.allocator.free(source);
+
+    var diag: std.zon.parse.Diagnostics = .{};
+    defer diag.deinit(b.allocator);
+
+    const manifest = std.zon.parse.fromSliceAlloc(
+        PartialManifest,
+        b.allocator,
+        source,
+        &diag,
+        .{
+            .ignore_unknown_fields = true,
+            .free_on_error = true,
+        },
+    ) catch return null;
+    defer std.zon.parse.free(b.allocator, manifest);
+
+    return b.dupe(manifest.version);
+}
+
+/// Injects the consumer's binary name, manifest version, and current git commit/branch into the fangz library module as a `fangz_meta` options module, making them available as defaults inside `App.init`.
+///
+/// Call this from your `build.zig` after resolving the fangz dependency:
+///
+/// ```zig
+/// const fangz_dep = b.dependency("fangz", .{ .target = target, .optimize = optimize });
+/// const fangz_mod = fangz_dep.module("fangz");
+/// // wire fangz_mod into your executable's imports as usual, then:
+/// const fangz_build = @import("fangz"); // imports fangz's build.zig
+/// fangz_build.injectMeta(b, exe, fangz_mod);
+/// ```
+///
+/// Injected fields:
+///
+/// - `name`: `compile.name` (the executable name)
+/// - `version`: extracted from the consumer's `build.zig.zon`
+/// - `commit`: short git commit hash (`git rev-parse --short HEAD`)
+/// - `branch`: current git branch (`git rev-parse --abbrev-ref HEAD`)
+///
+/// Git fields fall back to `""` when git is unavailable or the directory is not a repository. After injection, `App.init` uses these as fallback values when `.name`, `.version`, `.commit`, or `.branch` are omitted.
+pub fn injectMetadata(
+    b: *std.Build,
+    compile: *std.Build.Step.Compile,
+    fangz_mod: *std.Build.Module,
+) void {
+    const options = b.addOptions();
+
+    options.addOption([]const u8, "name", compile.name);
+    options.addOption([]const u8, "version", manifestVersion(b) orelse "");
+    options.addOption([]const u8, "commit", git.extractCommit(b));
+    options.addOption([]const u8, "branch", git.extractBranch(b));
+    options.addOption([]const u8, "source_date", sourceDate(b));
+
+    // Overwrite the default fangz_meta that fangz's own build() set up.
+    fangz_mod.addOptions("fangz_meta", options);
+}

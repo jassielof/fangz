@@ -39,6 +39,7 @@ pub fn render(
             try writer.print("  {s}\n", .{alias});
         }
     }
+
     const terminal_width = carnaval.terminalWidthForHandle(std.Io.File.stdout().handle);
     try renderUsage(writer, command, profile);
 
@@ -67,12 +68,15 @@ fn renderUsage(writer: anytype, command: *const Command, profile: ColorProfile) 
     try writer.print("\n", .{});
     try carnaval.Style.init().bolded().renderWithProfile("Usage:", writer, profile);
     try writer.print(" {s}", .{command.name});
+
     if (command.hasAnyOptions()) {
         try writer.print(" [OPTIONS]", .{});
     }
+
     if (command.subcommands.items.len > 0) {
         try writer.print(" <COMMAND>", .{});
     }
+
     for (command.positionals.items) |pos| {
         if (pos.variadic) {
             try writer.print(" <{s}>...", .{pos.name});
@@ -82,6 +86,7 @@ fn renderUsage(writer: anytype, command: *const Command, profile: ColorProfile) 
             try writer.print(" [{s}]", .{pos.name});
         }
     }
+
     try writer.print("\n", .{});
 }
 

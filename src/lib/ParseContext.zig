@@ -1,24 +1,17 @@
 //! Parsed argument context exposed to command hooks.
 //!
-//! This module stores resolved flags, positional values, and parse control
-//! signals like help/version requests.
+//! This module stores resolved flags, positional values, and parse control signals like help/version requests.
 //!
 //! ## Lifetime and ownership
 //!
-//! `ParseContext` **borrows** from the argv slice it was parsed from.  Every
-//! `[]const u8` value stored here — flag strings, positional strings, and the
-//! key/value slices inside `KeyValuePair` — is a direct sub-slice of the
-//! original argv allocation.  No per-value string duplication is performed.
+//! `ParseContext` **borrows** from the argv slice it was parsed from. Every `[]const u8` value stored here — flag strings, positional strings, and the key/value slices inside `KeyValuePair` — is a direct sub-slice of the original argv allocation. No per-value string duplication is performed.
 //!
-//! Concretely, when called through `App.executeProcess`, these slices are tied
-//! to owned argument copies kept alive for the duration of command execution.
-//! `App.parseProcess` keeps those owned copies on the app until the next parse
-//! or `App.deinit`.
+//! Concretely, when called through `App.executeProcess`, these slices are tied to owned argument copies kept alive for the duration of command execution. `App.parseProcess` keeps those owned copies on the app until the next parse or `App.deinit`.
 //!
-//! If you hold a `*ParseContext` obtained from `App.parseFrom` with a
-//! caller-owned argv slice, ensure the argv allocation outlives the context.
+//! If you hold a `*ParseContext` obtained from `App.parseFrom` with a caller-owned argv slice, ensure the argv allocation outlives the context.
 
 const std = @import("std");
+
 const Command = @import("Command.zig");
 
 pub const FlagValue = union(enum) {
@@ -229,6 +222,7 @@ fn assignFieldValue(
         }
         return false;
     }
+
     if (comptime FieldType == i64) {
         if (self.intFlag(name)) |value| {
             @field(out.*, field_name) = value;
@@ -236,6 +230,7 @@ fn assignFieldValue(
         }
         return false;
     }
+
     if (comptime FieldType == f64) {
         if (self.floatFlag(name)) |value| {
             @field(out.*, field_name) = value;
@@ -243,6 +238,7 @@ fn assignFieldValue(
         }
         return false;
     }
+
     if (comptime @typeInfo(FieldType) == .@"enum") {
         if (self.enumFlag(FieldType, name)) |value| {
             @field(out.*, field_name) = value;
@@ -250,6 +246,7 @@ fn assignFieldValue(
         }
         return false;
     }
+
     if (comptime isStringSlice(FieldType)) {
         if (self.stringFlag(name)) |value| {
             @field(out.*, field_name) = value;
@@ -257,6 +254,7 @@ fn assignFieldValue(
         }
         return false;
     }
+
     if (comptime isStringListType(FieldType)) {
         if (self.stringListFlag(name)) |value| {
             @field(out.*, field_name) = value;
@@ -264,6 +262,7 @@ fn assignFieldValue(
         }
         return false;
     }
+
     if (comptime isKeyValueListType(FieldType)) {
         if (self.keyValueFlag(name)) |value| {
             @field(out.*, field_name) = value;
@@ -278,11 +277,13 @@ fn assignFieldValue(
 /// Extracts typed arguments from parsed context into a struct.
 pub fn extract(self: *const ParseContext, comptime T: type) !T {
     const info = @typeInfo(T);
+
     if (info != .@"struct") {
         @compileError("extract expects a struct type");
     }
 
     var out: T = undefined;
+
     inline for (info.@"struct".fields) |field| {
         const FieldType = field.type;
 

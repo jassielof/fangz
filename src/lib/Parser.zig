@@ -53,8 +53,7 @@ pub const Diagnostic = struct {
 
 /// Parses argv against the command tree and returns a parse output context.
 pub fn parse(allocator: std.mem.Allocator, io: std.Io, root: *Command, argv: []const []const u8) !ParseOutput {
-    // freeze() is called by App before parsing; fall back to bindAliases here
-    // only when Parser is used directly without going through App.
+    // freeze() is called by App before parsing; fall back to bindAliases here only when Parser is used directly without going through App.
     if (!root.frozen) try root.bindAliases();
 
     const dispatch = try walkCommandPath(allocator, root, argv);
@@ -74,6 +73,7 @@ pub fn parse(allocator: std.mem.Allocator, io: std.Io, root: *Command, argv: []c
     }
 
     var tokenizer = Tokenizer.init(dispatch.remaining);
+
     while (tokenizer.next()) |tok| {
         switch (tok.kind) {
             .terminator => {},
@@ -97,6 +97,7 @@ pub fn parse(allocator: std.mem.Allocator, io: std.Io, root: *Command, argv: []c
     try validatePositionals(&ctx);
     try validateRequiredFlags(&ctx);
     try validateExclusiveFlags(&ctx);
+
     return .{ .context = ctx };
 }
 
@@ -114,6 +115,7 @@ fn walkCommandPath(allocator: std.mem.Allocator, root: *Command, argv: []const [
 
     while (idx < argv.len) : (idx += 1) {
         const token = argv[idx];
+
         if (std.mem.eql(u8, token, "help")) {
             var help_target = current;
             var j = idx + 1;
@@ -122,16 +124,21 @@ fn walkCommandPath(allocator: std.mem.Allocator, root: *Command, argv: []const [
             }
             return .{ .command = help_target, .remaining = &.{}, .help_for = help_target };
         }
+
         if (std.mem.startsWith(u8, token, "-")) break;
+
         if (current.findSubcommand(token)) |next| {
             current = next;
             continue;
         }
+
         if (current.subcommands.items.len > 0 and current.positionals.items.len == 0) {
             return ParseError.UnknownCommand;
         }
+
         break;
     }
+
     return .{ .command = current, .remaining = argv[idx..] };
 }
 
@@ -148,6 +155,7 @@ fn parseLongFlag(
         ctx.help_requested = true;
         return;
     }
+
     if (std.mem.eql(u8, body, "version")) {
         if (!commandAllowsVersion(command)) return ParseError.UnknownFlag;
         ctx.version_requested = true;
@@ -161,6 +169,7 @@ fn parseLongFlag(
             const flag = lookup.command.flags.constSlice()[lookup.index];
             if (flag.negatable and flag.value_type == .bool) {
                 try setFlagValue(allocator, ctx, flag, .{ .bool = false });
+
                 return;
             }
         }
@@ -194,6 +203,7 @@ fn parseShortBundle(
 
     var i: usize = 0;
     var consumed_attached_value = false;
+
     while (i < flags_part.len) : (i += 1) {
         const ch = flags_part[i];
         if (ch == 'h') {
@@ -217,6 +227,7 @@ fn parseShortBundle(
         const candidate = if (attached_all) |v| v else if (tail) |t| t else null;
         consumed_attached_value = attached_all != null or tail != null;
         try parseFlagValue(allocator, ctx, flag, candidate, tokenizer);
+
         return;
     }
 
