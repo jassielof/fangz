@@ -43,6 +43,7 @@ pub fn build(b: *std.Build) void {
     default_meta.addOption([]const u8, "commit", "");
     default_meta.addOption([]const u8, "branch", "");
     default_meta.addOption([]const u8, "source_date", metadata.sourceDate(b));
+    default_meta.addOption([]const u8, "default_template_path", metadata.defaultTemplatePath(b, mod));
 
     mod.addOptions("fangz_meta", default_meta);
 

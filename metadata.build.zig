@@ -12,6 +12,17 @@ pub fn sourceDate(b: *std.Build) []const u8 {
     return git.commitDate(b) orelse buildDate(b);
 }
 
+pub fn defaultTemplatePath(b: *std.Build, fangz_mod: ?*std.Build.Module) []const u8 {
+    if (fangz_mod) |mod| {
+        if (mod.root_source_file) |root_source_file| {
+            const template = root_source_file.dirname().path(b, "templates/default.adoc");
+            return template.getPath2(b, null);
+        }
+    }
+
+    return b.pathFromRoot("src/lib/templates/default.adoc");
+}
+
 pub fn buildDate(b: *std.Build) []const u8 {
     const now = std.Io.Timestamp.now(b.graph.io, .real);
     const seconds: usize = @intCast(now.toSeconds());
@@ -102,6 +113,7 @@ pub fn injectMetadata(
     options.addOption([]const u8, "commit", git.extractCommit(b));
     options.addOption([]const u8, "branch", git.extractBranch(b));
     options.addOption([]const u8, "source_date", sourceDate(b));
+    options.addOption([]const u8, "default_template_path", defaultTemplatePath(b, fangz_mod));
 
     // Overwrite the default fangz_meta that fangz's own build() set up.
     fangz_mod.addOptions("fangz_meta", options);

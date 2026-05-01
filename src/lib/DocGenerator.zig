@@ -6,6 +6,7 @@
 const std = @import("std");
 
 const trama = @import("trama");
+const meta = @import("fangz_meta");
 
 const Command = @import("Command.zig");
 const ParseContext = @import("ParseContext.zig");
@@ -196,11 +197,7 @@ pub fn generateDocs(
     try writeFile(io, output_path, doc, options.overwrite);
 }
 
-// FIXME: Fangz is not a native module from docent so modules/fangz is wrong, the second line is fine, either that or relative to the file on which the function is reading the template, for example src/lib/DocGenerator.zig calls is and would use a "templates/cli.tmpl" instead, since both files are in the same src/lib directory, but that would break if the calling function is moved, so just src/lib/template/cli.tmpl is fine ig.
-const default_template_paths = [_][]const u8{
-    "modules/fangz/src/lib/templates/default.adoc",
-    "src/lib/templates/default.adoc",
-};
+const package_default_template_path = "src/lib/templates/default.adoc";
 
 fn renderSingleFile(
     allocator: std.mem.Allocator,
@@ -221,10 +218,22 @@ fn renderSingleFile(
 }
 
 fn readDefaultTemplate(io: std.Io, allocator: std.mem.Allocator) ![]u8 {
-    for (default_template_paths) |path| {
-        return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited) catch continue;
+    return readTemplatePath(io, allocator, meta.default_template_path) catch |first_err| {
+        if (std.mem.eql(u8, meta.default_template_path, package_default_template_path)) return first_err;
+        return readTemplatePath(io, allocator, package_default_template_path);
+    };
+}
+
+fn readTemplatePath(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    if (!std.fs.path.isAbsolute(path)) {
+        return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
     }
-    return error.FileNotFound;
+
+    const dir_path = std.fs.path.dirname(path) orelse return error.FileNotFound;
+    const file_name = std.fs.path.basename(path);
+    var dir = try std.Io.Dir.openDirAbsolute(io, dir_path, .{});
+    defer dir.close(io);
+    return dir.readFileAlloc(io, file_name, allocator, .unlimited);
 }
 
 fn buildDocumentModel(allocator: std.mem.Allocator, root: *const Command) !DocumentModel {
