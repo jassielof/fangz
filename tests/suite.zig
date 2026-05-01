@@ -10,7 +10,6 @@ comptime {
 
 fn makeApp() !fangz.App {
     return fangz.App.init(testing.allocator, testing.io, .{
-        .name = "git",
         .description = "test app",
         .version = "1.2.3",
     });
@@ -48,7 +47,7 @@ test "help subcommand requests root help" {
 
     const ctx = try app.parseFrom(&.{"help"});
     try testing.expect(ctx.help_requested);
-    try testing.expectEqualStrings("git", ctx.command.name);
+    try testing.expectEqualStrings("fangz", ctx.command.name);
 }
 
 test "help subcommand requests nested command help" {
@@ -186,11 +185,11 @@ test "version flag is only available on root command" {
 
     const root_long = try app.parseFrom(&.{"--version"});
     try testing.expect(root_long.version_requested);
-    try testing.expectEqualStrings("git", root_long.command.name);
+    try testing.expectEqualStrings("fangz", root_long.command.name);
 
     const root_short = try app.parseFrom(&.{"-V"});
     try testing.expect(root_short.version_requested);
-    try testing.expectEqualStrings("git", root_short.command.name);
+    try testing.expectEqualStrings("fangz", root_short.command.name);
 
     try testing.expectError(error.UnknownFlag, app.parseFrom(&.{ "status", "--version" }));
     try testing.expectError(error.UnknownFlag, app.parseFrom(&.{ "status", "-V" }));
@@ -309,9 +308,9 @@ test "doc generator writes single asciidoc file by default" {
     const content = try readFileAlloc(io, testing.allocator, path);
     defer testing.allocator.free(content);
 
-    try testing.expect(std.mem.indexOf(u8, content, "= git CLI Reference") != null);
-    try testing.expect(std.mem.indexOf(u8, content, "== Command Index") != null);
-    try testing.expect(std.mem.indexOf(u8, content, "[#cmd-git-commit]") != null);
+    try testing.expect(std.mem.indexOf(u8, content, "= fangz") != null);
+    try testing.expect(std.mem.indexOf(u8, content, "== Command Index") == null);
+    try testing.expect(std.mem.indexOf(u8, content, "[#cmd-fangz-commit]") != null);
     try testing.expect(std.mem.indexOf(u8, content, "--message <STRING>") != null);
 }
 
@@ -340,15 +339,16 @@ test "doc generator renders nested commands as flat reference entries" {
 
     const doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/cli.adoc");
     defer testing.allocator.free(doc);
-    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-git]") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-git-remote]") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-git-remote-add]") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, "=== `git remote add`") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-fangz]") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-fangz-remote]") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-fangz-remote-add]") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, "=== `fangz remote add`") != null);
 }
 
 test "app docs include configured author and revision metadata" {
     var app = try fangz.App.init(testing.allocator, testing.io, .{
-        .name = "git",
+        .display_name = "Git",
+        .tagline = "Distributed Version Control",
         .description = "test app",
         .version = "1.2.3",
         .author_name = "Ada Lovelace",
@@ -370,9 +370,9 @@ test "app docs include configured author and revision metadata" {
     const doc = try readFileAlloc(testing.io, testing.allocator, out_dir ++ "/cli.adoc");
     defer testing.allocator.free(doc);
 
+    try testing.expect(std.mem.indexOf(u8, doc, "= Git: Distributed Version Control") != null);
     try testing.expect(std.mem.indexOf(u8, doc, "Ada Lovelace <ada@example.com>") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, "v1.2.3: main@abc1234") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, ":revdate: 2026-05-01") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, "v1.2.3, 2026-05-01: main (abc1234)") != null);
 }
 
 fn readFileAlloc(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
