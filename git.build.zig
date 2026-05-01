@@ -66,10 +66,10 @@ pub fn extractBranch(b: *std.Build) []const u8 {
 
 // TODO: Implement author (not commiter) extraction
 /// Using `git show -s --format=%aN HEAD`
-pub fn commitAuthor(b: *std.Build) ?[]const u8 {}
+// pub fn commitAuthor(b: *std.Build) ?[]const u8 {}
 // TODO: Implement email extraction
 /// Using `git show -s --format=%aE HEAD`
-pub fn commitEmail(b: *std.Build) ?[]const u8 {}
+// pub fn commitEmail(b: *std.Build) ?[]const u8 {}
 
 pub fn commitDate(b: *std.Build) ?[]const u8 {
     if (!std.process.can_spawn) return null;

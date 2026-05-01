@@ -2,7 +2,7 @@ const std = @import("std");
 
 const git = @import("git.build.zig");
 const metadata = @import("metadata.build.zig");
-pub const injectMetadata = metadata.injectMeta;
+pub const injectMetadata = metadata.injectMetadata;
 
 pub fn build(b: *std.Build) void {
     const mod_name = "fangz";

@@ -3,7 +3,6 @@ const std = @import("std");
 const git = @import("git.build.zig");
 
 const PartialManifest = struct {
-    name: @EnumLiteral(),
     version: []const u8,
     description: []const u8,
     author: []const u8,
