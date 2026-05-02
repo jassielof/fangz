@@ -53,7 +53,18 @@ fn renderCompleters(writer: *std.Io.Writer, root: *const Command) !void {
 
     try collectCompleters(root, &completers);
     for (completers.items) |completer| {
-        try writer.print("  def {s} [] {{\n    {s}\n  }}\n\n", .{ completer.name, completer.body });
+        try writer.print("  def {s} [{s}] {{\n", .{ completer.name, completer.params });
+        try renderIndentedBody(writer, completer.body);
+        try writer.print("  }}\n\n", .{});
+    }
+}
+
+fn renderIndentedBody(writer: *std.Io.Writer, body: []const u8) !void {
+    var rest = body;
+    while (rest.len > 0) {
+        const newline = std.mem.indexOfScalar(u8, rest, '\n') orelse rest.len;
+        try writer.print("    {s}\n", .{rest[0..newline]});
+        rest = if (newline < rest.len) rest[newline + 1 ..] else "";
     }
 }
 
@@ -118,7 +129,7 @@ fn renderPositionalCompleter(writer: *std.Io.Writer, path: []const u8, pos: Comm
 
 fn collectCompleters(cmd: *const Command, out: *std.ArrayList(Command.NuCompleter)) !void {
     for (cmd.positionals.items) |pos| {
-        const completer = pos.nu_completer orelse continue;
+        const completer = pos.completion.nu orelse continue;
         if (!containsCompleter(out.items, completer.name)) {
             try out.append(std.heap.page_allocator, completer);
         }
@@ -207,7 +218,7 @@ fn renderHelpComment(writer: *std.Io.Writer, description: []const u8) !void {
 }
 
 fn positionalCompleterAnnotation(path: []const u8, pos: Command.Positional) ![]const u8 {
-    if (pos.nu_completer) |completer| return std.fmt.allocPrint(std.heap.page_allocator, "@{s}", .{completer.name});
+    if (pos.completion.nu) |completer| return std.fmt.allocPrint(std.heap.page_allocator, "@{s}", .{completer.name});
     if (pos.allowed_values != null and pos.allowed_values.?.len > 0) {
         const name = try positionalCompleterName(path, pos.name);
         defer std.heap.page_allocator.free(name);

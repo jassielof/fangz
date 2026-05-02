@@ -216,21 +216,37 @@ fn EnumTagValueTable(comptime EnumType: type) type {
     };
 }
 
-/// A user-supplied Nushell custom completer that can be attached to a positional argument.
+/// Shell-specific completion metadata for an argument.
+///
+/// Fangz uses portable metadata such as enum values and `allowed_values` for
+/// every shell it can. Backend-specific fields are escape hatches for dynamic
+/// completion logic owned by the application.
+pub const Completion = struct {
+    /// Nushell custom completer. Fangz emits this into the generated Nu module
+    /// and attaches it to the argument as `string@<name>`.
+    nu: ?NuCompleter = null,
+};
+
+/// A user-supplied Nushell custom completer.
 ///
 /// - `name` becomes both the `def` name and the `@name` reference in the `extern` signature.
-/// - `body` is the single expression (or newline-separated statements) that forms the body of the generated `def <name> [] { <body> }` block.
+/// - `params` is copied into the generated Nushell `def` parameter list.
+/// - `body` is raw Nushell code placed inside the generated `def`.
 ///
 /// Example — complete only YAML files:
 /// ```zig
-/// .nu_completer = .{
-///     .name = "complete-yaml-files",
-///     .body = "ls *.yaml | get name",
+/// .completion = .{
+///     .nu = .{
+///         .name = "complete-yaml-files",
+///         .body = "ls *.yaml | get name",
+///     },
 /// }
 /// ```
 pub const NuCompleter = struct {
     /// The Nushell `def` name, e.g. `"complete-zig-paths"`.  Must be a valid Nu identifier.
     name: []const u8,
+    /// The Nushell parameter list, without brackets. Use `"context: string"` for context-aware completers.
+    params: []const u8 = "",
     /// The body placed inside `def <name> [] { ... }`.  Single-line expressions work as-is;
     /// for multi-line bodies embed `\n` with appropriate indentation.
     body: []const u8,
@@ -248,10 +264,8 @@ pub const Positional = struct {
     /// Optional display labels for each allowed value, shown alongside the value in help output.
     /// When provided, must have the same length as `allowed_values`.
     allowed_value_labels: ?[]const []const u8 = null,
-    /// Optional Nushell custom completer for this positional.
-    /// When set, the generated `extern` signature uses `string@<name>` and a corresponding
-    /// `def <name> [] { <body> }` is emitted inside the completions module.
-    nu_completer: ?NuCompleter = null,
+    /// Optional shell-specific completion logic for this positional.
+    completion: Completion = .{},
 };
 
 pub const Group = struct {
