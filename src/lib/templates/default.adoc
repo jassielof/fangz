@@ -2,6 +2,7 @@
 {{ if author_name }}{{ author_name }}{{ if author_email }} <{{ author_email }}>{{ end }}
 {{ end }}{{ if version }}v{{ version }}{{ if source_date }}, {{ source_date }}{{ end }}{{ if git_ref }}: {{ git_ref }}{{ end }}
 {{ end }}:toc: auto
+:source-highlighter: highlight.js
 :doctype: book
 
 {{ if description }}[abstract]
