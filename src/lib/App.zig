@@ -8,7 +8,7 @@ const carnaval = @import("carnaval");
 const meta = @import("fangz_meta");
 
 const Command = @import("Command.zig");
-const Completion = @import("Completion.zig");
+const Completion = @import("completions/root.zig");
 const DocGenerator = @import("DocGenerator.zig");
 const errors = @import("errors.zig");
 const Error = errors.Error;
@@ -241,7 +241,7 @@ pub fn generateDocs(self: *App, options: DocGenerator.Options) !void {
 /// Generates a shell completion script to the provided writer.
 ///
 /// Use the `Shell` enum for type-safe shell selection.  The script delegates to the `__complete` runtime endpoint for dynamic suggestions.
-pub fn generateCompletions(self: *App, shell: Completion.Shell, writer: anytype) !void {
+pub fn generateCompletions(self: *App, shell: Completion.Shell, writer: *std.Io.Writer) !void {
     try Completion.generateCompletions(&self.root_command, shell, writer);
 }
 
