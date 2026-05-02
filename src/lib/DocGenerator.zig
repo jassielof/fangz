@@ -17,7 +17,9 @@ const ListWriter = struct {
 
     pub fn print(self: ListWriter, comptime format: []const u8, args: anytype) !void {
         const chunk = try std.fmt.allocPrint(self.allocator, format, args);
+
         defer self.allocator.free(chunk);
+
         try self.list.appendSlice(self.allocator, chunk);
     }
 };
@@ -349,13 +351,9 @@ fn appendHelpCommandDoc(
     });
 }
 
-// ── Built-in docs subcommand ──────────────────────────────────────────────
-
 /// Registers the built-in `docs` subcommand on root.
 ///
-/// Generates AsciiDoc documentation for the application's full command tree.
-/// Called automatically by `App.ensureDocsCommand` — applications do not need
-/// to call this directly.
+/// Generates AsciiDoc documentation for the application's full command tree. Called automatically by `App.ensureDocsCommand` — applications do not need to call this directly.
 pub fn registerDocsCommand(root: *Command) !void {
     if (root.findSubcommand("docs") != null) return;
 
@@ -363,20 +361,24 @@ pub fn registerDocsCommand(root: *Command) !void {
         .name = "docs",
         .description = "Generate AsciiDoc documentation for this CLI",
     });
+
     try docs.addFlag([]const u8, .{
         .name = "output-dir",
         .description = "Directory where AsciiDoc documentation is written.",
         .default = "docs",
     });
+
     try docs.addFlag([]const u8, .{
         .name = "file",
         .description = "Output AsciiDoc file name.",
         .default = "cli.adoc",
     });
+
     try docs.addFlag([]const u8, .{
         .name = "template",
         .description = "Optional custom Trama template path.",
     });
+
     docs.setHooks(.{ .run = runDocsCommand });
 }
 
@@ -391,8 +393,6 @@ fn runDocsCommand(ctx: *ParseContext) !void {
         .template_path = template,
     });
 }
-
-// ── Shared helpers ────────────────────────────────────────────────────────
 
 fn writeFile(io: std.Io, path: []const u8, content: []const u8, overwrite: bool) !void {
     if (std.fs.path.dirname(path)) |parent| {

@@ -354,6 +354,7 @@ fn renderOneFlag(
     var d: std.Io.Writer = .fixed(&desc_buf);
     try d.print("{s}", .{flag.description});
     if (flag.required) try d.print(" [required]", .{});
+
     if (flag.default_value) |dv| {
         switch (dv) {
             .bool => |v| try d.print(" [default: {s}]", .{if (v) "true" else "false"}),
@@ -364,6 +365,7 @@ fn renderOneFlag(
             .string_list => try d.print(" [default: set]", .{}),
         }
     }
+
     if (flag.allowed_values) |values| {
         switch (flag.allowed_values_style) {
             .comma => {
@@ -384,6 +386,7 @@ fn renderOneFlag(
             },
         }
     }
+
     if (is_global) try d.print(" [global]", .{});
 
     try printAlignedOptionRow(writer, profile, spec_buf[0..spec_len], desc_buf[0..d.end], spec_width, terminal_width, allocator);
@@ -426,6 +429,7 @@ fn optionSpecLen(flag: Command.Flag) usize {
             return 4 + "--[no-]".len + flag.name.len;
         }
     }
+
     if (flag.negatable and flag.value_type == .bool) {
         return "--[no-]".len + flag.name.len;
     }
@@ -434,6 +438,7 @@ fn optionSpecLen(flag: Command.Flag) usize {
     if (flag.short != null) len += 4; // "-x, "
 
     const ty = if (flag.value_hint) |hint| hint else typeName(flag.value_type);
+
     if (ty.len > 0) {
         len += ty.len + 3; // " <type>"
         if (flag.value_type == .string_list or flag.value_type == .key_value_list) len += 3; // "..."

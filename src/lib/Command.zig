@@ -100,6 +100,7 @@ pub const Flag = struct {
     }
 };
 
+// FIXME: Rename to PascalCase
 fn unwrapOptional(comptime T: type) type {
     return switch (@typeInfo(T)) {
         .optional => |info| info.child,
@@ -262,6 +263,7 @@ pub const MutuallyExclusive = struct {
     names: []const []const u8,
 };
 
+// TODO: Move to file-level struct
 pub const Hooks = struct {
     /// Hook callback signature used during command execution lifecycle.
     pub const HookFn = *const fn (*ParseContext) anyerror!void;
@@ -272,6 +274,7 @@ pub const Hooks = struct {
     persistent_post_run: ?HookFn = null,
 };
 
+// TODO: This struct is the init options, rename and move to file-level struct
 pub const Init = struct {
     name: []const u8,
     /// Human-friendly display name used by generated documentation.

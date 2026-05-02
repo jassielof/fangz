@@ -12,6 +12,7 @@ pub fn sourceDate(b: *std.Build) []const u8 {
     return git.commitDate(b) orelse buildDate(b);
 }
 
+// TODO: Rename to default docs template, otherwise sounds too generic
 pub fn defaultTemplatePath(b: *std.Build, fangz_mod: ?*std.Build.Module) []const u8 {
     if (fangz_mod) |mod| {
         if (mod.root_source_file) |root_source_file| {
