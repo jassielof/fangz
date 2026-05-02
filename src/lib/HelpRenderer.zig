@@ -12,6 +12,32 @@ const Command = @import("Command.zig");
 /// - `.short` — compact output triggered by `-h`: synopsis, argument list, flag list with one-liner summaries only.
 /// - `.full`  — complete output triggered by `--help` or `help <cmd>`: same asshort plus per-flag `long_description` and per-command `long_description`.
 pub const HelpMode = enum { short, full };
+// FIXME: For example:
+//
+// ```zig
+// zig build cli -- completions --help
+// completion
+// Generate shell completion scripts
+
+// Aliases:
+//   completions
+
+// Usage: completion [OPTIONS] <shell>
+
+// Arguments:
+//   <shell>  Target shell. One of:
+//              • bash  Bash
+//              • zsh   Zsh
+//              • fish  Fish
+//              • pwsh  PowerShell
+//              • nu    Nushell
+
+// Options:
+//   -h, --help  Print help
+// ```
+//
+// it's not rendering fully, the first line after the command call, it only shows the last command, not the full command, it should show `docent completions` instead of just `completion`
+// TODO: Fix writer bad types, it should properly take the new writergate interface
 
 /// Renders command help sections to the provided writer.
 pub fn render(
