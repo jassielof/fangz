@@ -344,7 +344,7 @@ pub const Init = struct {
     /// Root-level examples for generated docs / long help (see `CliExample`).
     examples: ?[]const CliExample = null,
     /// When set, `Usage` / synopsis lines use this text verbatim (may include `\\n`) instead of deriving from positionals and subcommands.
-    /// Borrowed — not freed by `Command` (`[]const u8` from string literals, `bufPrint`, or caller-owned memory that outlives the command tree).
+    /// Borrowed — not freed by `Command` unless you replace it via `setUsageOverrideFormat` (heap-owned override).
     usage_override: ?[]const u8 = null,
     version: ?[]const u8 = null,
     /// Author name used by generated documentation.
@@ -399,8 +399,9 @@ min_positionals: ?usize = null,
 max_positionals: ?usize = null,
 require_subcommand: bool = false,
 help_on_empty_args: bool = false,
-/// Borrowed pointer; see `Init.usage_override`.
+/// Borrowed pointer unless `usage_override_owned` is true; see `Init.usage_override`.
 usage_override: ?[]const u8 = null,
+usage_override_owned: bool = false,
 /// Root-level CLI examples (AsciiDoc / long help).
 examples: ?[]const CliExample = null,
 /// Set by freeze(). Prevents further structural mutations.
@@ -417,6 +418,7 @@ pub fn init(allocator: Allocator, cfg: Init) !Command {
         .long_description = cfg.long_description,
         .examples = cfg.examples,
         .usage_override = cfg.usage_override,
+        .usage_override_owned = false,
         .version = cfg.version,
         .author_name = cfg.author_name,
         .author_email = cfg.author_email,
@@ -438,8 +440,20 @@ pub fn init(allocator: Allocator, cfg: Init) !Command {
     };
 }
 
+/// Replaces `usage_override` with heap memory owned by this command (frees any previous owned override).
+pub fn setUsageOverrideFormat(self: *Command, comptime fmt: []const u8, args: anytype) !void {
+    if (self.usage_override_owned) {
+        if (self.usage_override) |old| self.allocator.free(@constCast(old));
+    }
+    self.usage_override = try std.fmt.allocPrint(self.allocator, fmt, args);
+    self.usage_override_owned = true;
+}
+
 /// Recursively deinitializes the command and all descendants.
 pub fn deinit(self: *Command) void {
+    if (self.usage_override_owned) {
+        if (self.usage_override) |old| self.allocator.free(@constCast(old));
+    }
     for (self.subcommands.items) |sub| {
         sub.deinit();
         self.allocator.destroy(sub);

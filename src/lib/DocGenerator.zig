@@ -239,7 +239,8 @@ fn renderSingleFile(
         try readDefaultTemplate(io, allocator);
     defer allocator.free(template);
 
-    return trama.renderAlloc(allocator, template, model, .{ .escape_mode = .asciidoc });
+    // Pass by pointer so Trama does not stack-copy the large `DocumentModel`.
+    return trama.renderAlloc(allocator, template, &model, .{ .escape_mode = .asciidoc });
 }
 
 fn readDefaultTemplate(io: std.Io, allocator: std.mem.Allocator) ![]u8 {
