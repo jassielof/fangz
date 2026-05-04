@@ -53,6 +53,23 @@ pub fn render(
         try writer.print("{s}\n", .{command.description});
     }
 
+    if (mode == .full) {
+        if (command.examples) |exs| {
+            if (exs.len > 0) {
+                try writer.print("\n", .{});
+                try carnaval.Style.init().bolded().renderWithProfile("Examples:", writer, profile);
+                try writer.print("\n", .{});
+
+                for (exs) |ex| {
+                    if (ex.description.len > 0) {
+                        try writer.print("  {s}\n", .{ex.description});
+                    }
+                    try writer.print("    {s}\n", .{ex.command});
+                }
+            }
+        }
+    }
+
     if (mode == .full and command.long_description.len > 0) {
         try writer.print("\n{s}\n", .{command.long_description});
     }
@@ -93,10 +110,42 @@ pub fn render(
 fn renderUsage(writer: anytype, command: *const Command, profile: ColorProfile) !void {
     try writer.print("\n", .{});
     try carnaval.Style.init().bolded().renderWithProfile("Usage:", writer, profile);
+
+    if (command.usage_override) |u| {
+        var lines = std.mem.splitScalar(u8, u, '\n');
+        var first_line = true;
+
+        while (lines.next()) |line| {
+            if (first_line) {
+                try writer.print(" {s}", .{line});
+                first_line = false;
+            } else {
+                try writer.print("\n{s}", .{line});
+            }
+        }
+
+        try writer.print("\n", .{});
+
+        return;
+    }
+
     try writer.print(" {s}", .{command.name});
 
     if (command.hasAnyOptions()) {
         try writer.print(" [OPTIONS]", .{});
+    }
+
+    if (command.parent == null and command.subcommands.items.len > 0 and
+        command.positionals.items.len > 0)
+    {
+        const pos0 = command.positionals.items[0];
+        if (pos0.variadic and !pos0.required) {
+            try writer.print(" [PATHS]...", .{});
+            try writer.print("\n{s} <COMMAND>", .{command.name});
+            try writer.print("\n", .{});
+
+            return;
+        }
     }
 
     if (command.subcommands.items.len > 0) {
@@ -139,7 +188,7 @@ fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfi
         if (arg.allowed_values) |vals| {
             switch (arg.allowed_values_style) {
                 .comma => {
-                    try dw.print(" [possible values: ", .{});
+                    try dw.print(" [possible: ", .{});
                     for (vals, 0..) |v, i| {
                         if (i != 0) try dw.print(", ", .{});
                         try dw.print("{s}", .{v});
@@ -329,7 +378,14 @@ fn renderOneFlag(
         std.mem.copyForwards(u8, spec_buf[spec_len .. spec_len + flag.name.len], flag.name);
         spec_len += flag.name.len;
 
-        const ty = if (flag.value_hint) |hint| hint else typeName(flag.value_type);
+        var ty_buf: [72]u8 = undefined;
+        const ty: []const u8 = if (flag.value_type == .key_value_list and flag.key_metavar != null and flag.value_metavar != null)
+            std.fmt.bufPrint(&ty_buf, "{s}={s}", .{ flag.key_metavar.?, flag.value_metavar.? }) catch "KEY=VALUE"
+        else if (flag.value_hint) |hint|
+            hint
+        else
+            typeName(flag.value_type);
+
         if (ty.len > 0) {
             spec_buf[spec_len] = ' ';
             spec_len += 1;
@@ -350,7 +406,7 @@ fn renderOneFlag(
         }
     }
 
-    var desc_buf: [256]u8 = undefined;
+    var desc_buf: [512]u8 = undefined;
     var d: std.Io.Writer = .fixed(&desc_buf);
     try d.print("{s}", .{flag.description});
     if (flag.required) try d.print(" [required]", .{});
@@ -367,9 +423,11 @@ fn renderOneFlag(
     }
 
     if (flag.allowed_values) |values| {
-        switch (flag.allowed_values_style) {
+        if (flag.value_type == .key_value_list and flag.allowed_keys != null) {
+            //
+        } else switch (flag.allowed_values_style) {
             .comma => {
-                try d.print(" [possible values: ", .{});
+                try d.print(" [possible: ", .{});
                 for (values, 0..) |v, i| {
                     if (i != 0) try d.print(", ", .{});
                     try d.print("{s}", .{v});
@@ -377,7 +435,6 @@ fn renderOneFlag(
                 try d.print("]", .{});
             },
             .bullet_list => {
-                // Append inline label; bullets rendered after the row.
                 if (d.end > 0) {
                     try d.print(" One of:", .{});
                 } else {
@@ -391,9 +448,10 @@ fn renderOneFlag(
 
     try printAlignedOptionRow(writer, profile, spec_buf[0..spec_len], desc_buf[0..d.end], spec_width, terminal_width, allocator);
 
-    // Render allowed values as aligned bullets below the row for .list style.
     if (flag.allowed_values) |values| {
-        if (flag.allowed_values_style == .bullet_list) {
+        if (flag.value_type == .key_value_list and flag.allowed_keys != null) {
+            //
+        } else if (flag.allowed_values_style == .bullet_list) {
             const continuation_pad = 2 + spec_width + 2;
             var max_val_width: usize = 0;
             for (values) |v| {
@@ -419,6 +477,50 @@ fn renderOneFlag(
         try printSpaces(writer, indent);
         try writer.print("{s}\n", .{flag.long_description});
     }
+
+    if (mode == .full) {
+        const indent = 4 + spec_width + 2;
+
+        if (flag.examples) |exs| {
+            if (exs.len > 0) {
+                try printSpaces(writer, indent);
+                try carnaval.Style.init().bolded().renderWithProfile("Examples:", writer, profile);
+                try writer.print("\n", .{});
+
+                for (exs) |ex| {
+                    if (ex.description.len > 0) {
+                        try printSpaces(writer, indent + 2);
+                        try writer.print("{s}\n", .{ex.description});
+                    }
+
+                    try printSpaces(writer, indent + 2);
+                    try writer.print("{s}\n", .{ex.command});
+                }
+            }
+        }
+
+        if (flag.key_value_help) |kv| {
+            if (kv.examples.len > 0) {
+                try printSpaces(writer, indent);
+                try carnaval.Style.init().bolded().renderWithProfile("Examples:", writer, profile);
+                try writer.print("\n", .{});
+
+                for (kv.examples) |ex| {
+                    if (ex.description.len > 0) {
+                        try printSpaces(writer, indent + 2);
+                        try writer.print("{s}\n", .{ex.description});
+                    }
+                    try printSpaces(writer, indent + 2);
+                    try writer.print("{s}\n", .{ex.command});
+                }
+            }
+
+            if (kv.override_behavior_note.len > 0) {
+                try printSpaces(writer, indent);
+                try writer.print("{s}\n", .{kv.override_behavior_note});
+            }
+        }
+    }
 }
 
 /// Computes display width of an option specification string.
@@ -437,10 +539,15 @@ fn optionSpecLen(flag: Command.Flag) usize {
     var len = flag.name.len + 2; // "--" + name
     if (flag.short != null) len += 4; // "-x, "
 
-    const ty = if (flag.value_hint) |hint| hint else typeName(flag.value_type);
+    const ty_len: usize = if (flag.value_type == .key_value_list and flag.key_metavar != null and flag.value_metavar != null)
+        flag.key_metavar.?.len + 1 + flag.value_metavar.?.len
+    else blk: {
+        const ty = if (flag.value_hint) |hint| hint else typeName(flag.value_type);
+        break :blk ty.len;
+    };
 
-    if (ty.len > 0) {
-        len += ty.len + 3; // " <type>"
+    if (ty_len > 0) {
+        len += ty_len + 3; // " <type>"
         if (flag.value_type == .string_list or flag.value_type == .key_value_list) len += 3; // "..."
     }
 

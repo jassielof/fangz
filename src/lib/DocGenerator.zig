@@ -36,6 +36,10 @@ pub const Options = struct {
     include_hidden: bool = false,
     /// When true, existing files are overwritten.
     overwrite: bool = true,
+    /// When true, emits a redundant command index (AsciiDoc ToC is preferred).
+    include_command_index: bool = false,
+    /// AsciiDoc `toc` placement (e.g. `auto`, `left`).
+    toc: []const u8 = "auto",
 };
 
 pub const DocumentModel = struct {
@@ -53,14 +57,22 @@ pub const DocumentModel = struct {
     git_ref: []const u8,
     source_date: []const u8 = "",
     app_name_attribute: []const u8,
+    include_command_index: bool,
     command_index: []const u8,
+    toc: []const u8,
+    app_examples: []const Command.CliExample,
+    /// AsciiDoc anchor for `doc help` (xref target).
+    help_command_anchor: []const u8,
     root: CommandDoc,
+    /// Subcommands and `help` — excludes the root entry; used for the reference section without duplicating root.
+    subcommand_reference: []const CommandDoc,
     commands_flat: []CommandDoc,
 
     fn deinit(self: *DocumentModel, allocator: std.mem.Allocator) void {
         allocator.free(self.title);
         allocator.free(self.git_ref);
         allocator.free(self.command_index);
+        allocator.free(self.help_command_anchor);
         for (self.commands_flat) |*cmd| cmd.deinit(allocator);
         allocator.free(self.commands_flat);
     }
@@ -147,7 +159,10 @@ pub const FlagDoc = struct {
     short: []const u8,
     long_display: []const u8,
     full_signature: []const u8,
+    /// One-line summary (typically `Flag.description`).
     description: []const u8,
+    /// Extra prose (`Flag.long_description`).
+    extended: []const u8,
     type_name: []const u8,
     required: bool,
     required_text: []const u8,
@@ -155,13 +170,21 @@ pub const FlagDoc = struct {
     has_default: bool,
     scope: []const u8,
     value_hint: []const u8,
+    value_hint_owned: ?[]const u8 = null,
     possible_values: []const []const u8,
     has_possible_values: bool,
     is_bool: bool,
     is_builtin: bool,
     is_repeatable: bool,
+    has_key_value_metadata: bool,
+    kv_keys: []const Command.KeyValueKeyMeta,
+    kv_values: []const Command.KeyValueValueMeta,
+    kv_override_note: []const u8,
+    flag_examples: []const Command.CliExample,
+    kv_examples: []const Command.CliExample,
 
     fn deinit(self: *FlagDoc, allocator: std.mem.Allocator) void {
+        if (self.value_hint_owned) |s| allocator.free(s);
         allocator.free(self.short);
         allocator.free(self.long_display);
         allocator.free(self.full_signature);
@@ -207,7 +230,7 @@ fn renderSingleFile(
     root: *const Command,
     options: Options,
 ) ![]u8 {
-    var model = try buildDocumentModel(allocator, root);
+    var model = try buildDocumentModel(allocator, root, options);
     defer model.deinit(allocator);
 
     const template = if (options.template_path) |path|
@@ -238,7 +261,7 @@ fn readTemplatePath(io: std.Io, allocator: std.mem.Allocator, path: []const u8) 
     return dir.readFileAlloc(io, file_name, allocator, .unlimited);
 }
 
-fn buildDocumentModel(allocator: std.mem.Allocator, root: *const Command) !DocumentModel {
+fn buildDocumentModel(allocator: std.mem.Allocator, root: *const Command, options: Options) !DocumentModel {
     var commands = try std.ArrayList(CommandDoc).initCapacity(allocator, 8);
     errdefer {
         for (commands.items) |*cmd| cmd.deinit(allocator);
@@ -264,8 +287,21 @@ fn buildDocumentModel(allocator: std.mem.Allocator, root: *const Command) !Docum
     const git_ref = try gitRef(allocator, root.git_branch, root.git_commit);
     errdefer allocator.free(git_ref);
 
-    const command_index = try buildCommandIndex(allocator, root, commands_flat);
+    const command_index = if (options.include_command_index)
+        try buildCommandIndex(allocator, root, commands_flat)
+    else
+        try allocator.dupe(u8, "");
     errdefer allocator.free(command_index);
+
+    const help_display_path = try std.fmt.allocPrint(allocator, "{s} help", .{root.name});
+    defer allocator.free(help_display_path);
+    const help_command_anchor = try anchorForDisplayPath(allocator, help_display_path);
+    errdefer allocator.free(help_command_anchor);
+
+    const subcommand_reference: []const CommandDoc = if (commands_flat.len > 1)
+        commands_flat[1..]
+    else
+        &.{};
 
     return .{
         .binary_name = root.name,
@@ -282,8 +318,13 @@ fn buildDocumentModel(allocator: std.mem.Allocator, root: *const Command) !Docum
         .git_ref = git_ref,
         .source_date = root.source_date,
         .app_name_attribute = root.name,
+        .include_command_index = options.include_command_index,
         .command_index = command_index,
+        .toc = options.toc,
+        .app_examples = root.examples orelse &.{},
+        .help_command_anchor = help_command_anchor,
         .root = if (commands_flat.len > 0) commands_flat[0] else CommandDoc.empty(),
+        .subcommand_reference = subcommand_reference,
         .commands_flat = commands_flat,
     };
 }
@@ -473,13 +514,30 @@ fn buildPathParts(allocator: std.mem.Allocator, chain: []const *const Command) !
 }
 
 fn buildUsage(allocator: std.mem.Allocator, cmd: *const Command, display_path: []const u8) ![]u8 {
+    if (cmd.usage_override) |u| {
+        return allocator.dupe(u8, u);
+    }
     var out = try std.ArrayList(u8).initCapacity(allocator, display_path.len + 64);
     errdefer out.deinit(allocator);
     var w = ListWriter{ .allocator = allocator, .list = &out };
 
     try w.print("{s}", .{display_path});
     if (cmd.hasAnyOptions()) try w.print(" [OPTIONS]", .{});
-    if (cmd.subcommands.items.len > 0) try w.print(" <COMMAND>", .{});
+
+    if (cmd.parent == null and cmd.subcommands.items.len > 0 and
+        cmd.positionals.items.len > 0)
+    {
+        const pos0 = cmd.positionals.items[0];
+        if (pos0.variadic and !pos0.required) {
+            try w.print(" [PATHS]...", .{});
+            try w.print("\n{s} <COMMAND>", .{cmd.name});
+            return out.toOwnedSlice(allocator);
+        }
+    }
+
+    if (cmd.subcommands.items.len > 0) {
+        try w.print(" <COMMAND>", .{});
+    }
     for (cmd.positionals.items) |pos| {
         if (pos.variadic) {
             try w.print(" <{s}>...", .{pos.name});
@@ -553,24 +611,47 @@ fn flagDocFromFlag(allocator: std.mem.Allocator, flag: Command.Flag, scope: []co
     const default_value = try defaultValueString(allocator, flag);
     errdefer allocator.free(default_value);
 
+    const kv = flag.key_value_help;
+    const has_kv = kv != null and flag.value_type == .key_value_list;
+
+    var value_hint_owned: ?[]const u8 = null;
+    errdefer if (value_hint_owned) |s| allocator.free(s);
+    const value_hint_doc: []const u8 = if (flag.value_type == .key_value_list and flag.key_metavar != null and flag.value_metavar != null) blk: {
+        const s = try std.fmt.allocPrint(allocator, "{s}={s}", .{ flag.key_metavar.?, flag.value_metavar.? });
+        value_hint_owned = s;
+        break :blk s;
+    } else if (flag.value_hint) |h| h else typeToken(flag.value_type);
+
+    const hide_kv_enum = flag.value_type == .key_value_list and flag.allowed_keys != null;
+    const possible = flag.allowed_values orelse &.{};
+    const has_possible = flag.allowed_values != null and flag.allowed_values.?.len > 0 and !hide_kv_enum;
+
     return .{
         .name = flag.name,
         .short = short,
         .long_display = long_display,
         .full_signature = full_signature,
-        .description = if (flag.long_description.len > 0) flag.long_description else flag.description,
+        .description = flag.description,
+        .extended = flag.long_description,
         .type_name = typeToken(flag.value_type),
         .required = flag.required,
         .required_text = if (flag.required) "yes" else "no",
         .default_value = default_value,
         .has_default = flag.default_value != null,
         .scope = scope,
-        .value_hint = flag.value_hint orelse typeToken(flag.value_type),
-        .possible_values = flag.allowed_values orelse &.{},
-        .has_possible_values = flag.allowed_values != null and flag.allowed_values.?.len > 0,
+        .value_hint = value_hint_doc,
+        .value_hint_owned = value_hint_owned,
+        .possible_values = possible,
+        .has_possible_values = has_possible,
         .is_bool = flag.value_type == .bool,
         .is_builtin = builtin,
         .is_repeatable = flag.value_type == .string_list or flag.value_type == .key_value_list,
+        .has_key_value_metadata = has_kv,
+        .kv_keys = if (has_kv) kv.?.keys else &.{},
+        .kv_values = if (has_kv) kv.?.values else &.{},
+        .kv_override_note = if (has_kv) kv.?.override_behavior_note else "",
+        .flag_examples = flag.examples orelse &.{},
+        .kv_examples = if (has_kv) kv.?.examples else &.{},
     };
 }
 
@@ -581,6 +662,7 @@ fn builtinFlagDoc(allocator: std.mem.Allocator, signature: []const u8, name: []c
         .long_display = try allocator.dupe(u8, ""),
         .full_signature = try allocator.dupe(u8, signature),
         .description = description,
+        .extended = "",
         .type_name = "bool",
         .required = false,
         .required_text = "no",
@@ -588,11 +670,18 @@ fn builtinFlagDoc(allocator: std.mem.Allocator, signature: []const u8, name: []c
         .has_default = false,
         .scope = "built-in",
         .value_hint = "",
+        .value_hint_owned = null,
         .possible_values = &.{},
         .has_possible_values = false,
         .is_bool = true,
         .is_builtin = true,
         .is_repeatable = false,
+        .has_key_value_metadata = false,
+        .kv_keys = &.{},
+        .kv_values = &.{},
+        .kv_override_note = "",
+        .flag_examples = &.{},
+        .kv_examples = &.{},
     };
 }
 
@@ -682,6 +771,8 @@ fn appendCommandIndexLine(allocator: std.mem.Allocator, out: *std.ArrayList(u8),
 
 /// Builds the display spec string for a flag (e.g. `-m, --message <STRING>`).
 fn buildFlagSpec(allocator: std.mem.Allocator, flag: Command.Flag) ![]u8 {
+    const repeat = if (flag.value_type == .string_list or flag.value_type == .key_value_list) "..." else "";
+
     if (flag.negatable and flag.value_type == .bool) {
         if (flag.short) |short| {
             return std.fmt.allocPrint(allocator, "-{c}, --[no-]{s}", .{ short, flag.name });
@@ -692,24 +783,30 @@ fn buildFlagSpec(allocator: std.mem.Allocator, flag: Command.Flag) ![]u8 {
         if (flag.value_type == .bool) {
             return std.fmt.allocPrint(allocator, "-{c}, --{s}", .{ short, flag.name });
         }
+        if (flag.value_type == .key_value_list and flag.key_metavar != null and flag.value_metavar != null) {
+            return std.fmt.allocPrint(allocator, "-{c}, --{s} <{s}={s}>{s}", .{ short, flag.name, flag.key_metavar.?, flag.value_metavar.?, repeat });
+        }
         if (flag.value_hint) |hint| {
             if (hint.len > 0 and (hint[0] == '<' or hint[0] == '[')) {
-                return std.fmt.allocPrint(allocator, "-{c}, --{s} {s}", .{ short, flag.name, hint });
+                return std.fmt.allocPrint(allocator, "-{c}, --{s} {s}{s}", .{ short, flag.name, hint, repeat });
             }
-            return std.fmt.allocPrint(allocator, "-{c}, --{s} <{s}>", .{ short, flag.name, hint });
+            return std.fmt.allocPrint(allocator, "-{c}, --{s} <{s}>{s}", .{ short, flag.name, hint, repeat });
         }
-        return std.fmt.allocPrint(allocator, "-{c}, --{s} <{s}>", .{ short, flag.name, typeToken(flag.value_type) });
+        return std.fmt.allocPrint(allocator, "-{c}, --{s} <{s}>{s}", .{ short, flag.name, typeToken(flag.value_type), repeat });
     }
     if (flag.value_type == .bool) {
         return std.fmt.allocPrint(allocator, "--{s}", .{flag.name});
     }
+    if (flag.value_type == .key_value_list and flag.key_metavar != null and flag.value_metavar != null) {
+        return std.fmt.allocPrint(allocator, "--{s} <{s}={s}>{s}", .{ flag.name, flag.key_metavar.?, flag.value_metavar.?, repeat });
+    }
     if (flag.value_hint) |hint| {
         if (hint.len > 0 and (hint[0] == '<' or hint[0] == '[')) {
-            return std.fmt.allocPrint(allocator, "--{s} {s}", .{ flag.name, hint });
+            return std.fmt.allocPrint(allocator, "--{s} {s}{s}", .{ flag.name, hint, repeat });
         }
-        return std.fmt.allocPrint(allocator, "--{s} <{s}>", .{ flag.name, hint });
+        return std.fmt.allocPrint(allocator, "--{s} <{s}>{s}", .{ flag.name, hint, repeat });
     }
-    return std.fmt.allocPrint(allocator, "--{s} <{s}>", .{ flag.name, typeToken(flag.value_type) });
+    return std.fmt.allocPrint(allocator, "--{s} <{s}>{s}", .{ flag.name, typeToken(flag.value_type), repeat });
 }
 
 fn typeToken(flag_type: Command.FlagType) []const u8 {

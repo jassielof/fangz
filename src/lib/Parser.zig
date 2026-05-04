@@ -51,10 +51,30 @@ pub const Diagnostic = struct {
     }
 };
 
+/// Last key-value flag payload seen while parsing (for richer diagnostics).
+pub const KeyValueParseNote = struct {
+    flag_name: []const u8,
+    raw: []const u8,
+};
+
+threadlocal var last_key_value_note: ?KeyValueParseNote = null;
+
+fn setKeyValueNote(flag_name: []const u8, raw: []const u8) void {
+    last_key_value_note = .{ .flag_name = flag_name, .raw = raw };
+}
+
+fn takeKeyValueNote() ?KeyValueParseNote {
+    const n = last_key_value_note;
+    last_key_value_note = null;
+    return n;
+}
+
 /// Parses argv against the command tree and returns a parse output context.
 pub fn parse(allocator: std.mem.Allocator, io: std.Io, root: *Command, argv: []const []const u8) !ParseOutput {
     // freeze() is called by App before parsing; fall back to bindAliases here only when Parser is used directly without going through App.
     if (!root.frozen) try root.bindAliases();
+
+    last_key_value_note = null;
 
     const dispatch = try walkCommandPath(allocator, root, argv);
     if (dispatch.help_for) |help_cmd| {
@@ -296,6 +316,7 @@ fn parseFlagValue(
         },
         .key_value_list => {
             const raw = attached_value orelse nextValueToken(tokenizer) orelse return ParseError.MissingFlagValue;
+            setKeyValueNote(flag.name, raw);
             const eq_idx = std.mem.indexOfScalar(u8, raw, '=') orelse return ParseError.KeyValueMissingEquals;
             const key = raw[0..eq_idx];
             const value = raw[eq_idx + 1 ..];
@@ -467,14 +488,145 @@ pub fn diagnoseError(
         error.InvalidInt => makeDiagnostic(allocator, "expected int value for flag", null),
         error.InvalidFloat => makeDiagnostic(allocator, "expected float value for flag", null),
         error.InvalidEnumValue => makeDiagnostic(allocator, "invalid value; expected one of allowed values", null),
-        error.KeyValueMissingEquals => makeDiagnostic(allocator, "expected key=value for flag", null),
-        error.KeyValueEmptyKey => makeDiagnostic(allocator, "key=value flag key cannot be empty", null),
-        error.KeyValueEmptyValue => makeDiagnostic(allocator, "key=value flag value cannot be empty", null),
-        error.InvalidAllowedKey => makeDiagnostic(allocator, "invalid key; expected one of allowed keys", null),
-        error.InvalidAllowedValue => makeDiagnostic(allocator, "invalid value; expected one of allowed values", null),
+        error.KeyValueMissingEquals,
+        error.KeyValueEmptyKey,
+        error.KeyValueEmptyValue,
+        error.InvalidAllowedKey,
+        error.InvalidAllowedValue,
+        => diagnoseKeyValueFlagError(allocator, root, argv, err),
         error.UnexpectedValueForBool => makeDiagnostic(allocator, "boolean flag does not accept a value", null),
         error.MutuallyExclusiveFlags => makeDiagnostic(allocator, "mutually exclusive flags were provided together", null),
     };
+}
+
+fn keyValueExampleRuleName(flag: Command.Flag) []const u8 {
+    if (flag.allowed_keys) |keys| {
+        if (keys.len > 0) return keys[0];
+    }
+    return "RULE";
+}
+
+fn diagnoseKeyValueFlagError(
+    allocator: std.mem.Allocator,
+    root: *Command,
+    argv: []const []const u8,
+    err: anyerror,
+) !Diagnostic {
+    const cmd = detectTargetCommand(root, argv);
+    const note = takeKeyValueNote() orelse {
+        return switch (err) {
+            error.KeyValueMissingEquals => makeDiagnostic(allocator, "invalid format for key=value flag (expected KEY=VALUE)", null),
+            error.KeyValueEmptyKey => makeDiagnostic(allocator, "key=value flag key cannot be empty", null),
+            error.KeyValueEmptyValue => makeDiagnostic(allocator, "key=value flag value cannot be empty", null),
+            error.InvalidAllowedKey => makeDiagnostic(allocator, "invalid key for key=value flag", null),
+            error.InvalidAllowedValue => makeDiagnostic(allocator, "invalid value for key=value flag", null),
+            else => unreachable,
+        };
+    };
+    const root_name = cmd.rootConst().name;
+    const lookup = cmd.resolveFlagByName(note.flag_name) orelse {
+        return makeDiagnostic(allocator, "key=value flag error", null);
+    };
+    const flag = lookup.command.flags.constSlice()[lookup.index];
+    if (flag.value_type != .key_value_list) {
+        return makeDiagnostic(allocator, "key=value flag error", null);
+    }
+
+    var metavar_buf: [80]u8 = undefined;
+    const metavar: []const u8 = blk: {
+        if (flag.key_metavar) |k| {
+            if (flag.value_metavar) |v| {
+                break :blk std.fmt.bufPrint(&metavar_buf, "{s}={s}", .{ k, v }) catch "KEY=VALUE";
+            }
+        }
+        if (flag.value_hint) |h| break :blk h;
+        break :blk "KEY=VALUE";
+    };
+
+    const ex_rule = keyValueExampleRuleName(flag);
+
+    switch (err) {
+        error.KeyValueMissingEquals => {
+            const msg = try std.fmt.allocPrint(allocator,
+                \\invalid format for --{s}
+                \\
+                \\  got: {s}
+                \\
+                \\Expected:
+                \\  --{s} <{s}>...
+                \\
+                \\Example:
+                \\  {s} --{s} {s}=deny src
+            , .{ note.flag_name, note.raw, note.flag_name, metavar, root_name, note.flag_name, ex_rule });
+            return .{ .allocator = allocator, .message = msg, .hint = null };
+        },
+        error.KeyValueEmptyKey, error.KeyValueEmptyValue => {
+            const msg = try std.fmt.allocPrint(allocator,
+                \\invalid format for --{s}
+                \\
+                \\  got: {s}
+                \\
+                \\Expected:
+                \\  --{s} <{s}>...
+            , .{ note.flag_name, note.raw, note.flag_name, metavar });
+            return .{ .allocator = allocator, .message = msg, .hint = null };
+        },
+        error.InvalidAllowedKey => {
+            const eq = std.mem.indexOfScalar(u8, note.raw, '=') orelse note.raw.len;
+            const bad_key = note.raw[0..eq];
+            const hint_msg: ?[]const u8 = blk: {
+                if (flag.allowed_keys) |keys| {
+                    if (Suggest.closest(bad_key, keys)) |sug| {
+                        break :blk try std.fmt.allocPrint(allocator, "did you mean '{s}'?", .{sug});
+                    }
+                }
+                break :blk null;
+            };
+            errdefer if (hint_msg) |h| allocator.free(h);
+            const msg = try std.fmt.allocPrint(allocator,
+                \\invalid rule for --{s}
+                \\
+                \\  got: {s}
+                \\
+                \\Unknown rule:
+                \\  {s}
+                \\
+                \\Expected:
+                \\  --{s} <{s}>...
+            , .{ note.flag_name, note.raw, bad_key, note.flag_name, metavar });
+            return .{ .allocator = allocator, .message = msg, .hint = hint_msg };
+        },
+        error.InvalidAllowedValue => {
+            const eq_idx = std.mem.indexOfScalar(u8, note.raw, '=') orelse return makeDiagnostic(allocator, "invalid value for key=value flag", null);
+            const bad_val = note.raw[eq_idx + 1 ..];
+            var levels_buf: [256]u8 = undefined;
+            var lw: std.Io.Writer = .fixed(&levels_buf);
+            if (flag.allowed_values) |vals| {
+                for (vals, 0..) |v, i| {
+                    if (i != 0) try lw.print(", ", .{});
+                    try lw.print("{s}", .{v});
+                }
+            } else {
+                try lw.print("(none)", .{});
+            }
+            const msg = try std.fmt.allocPrint(allocator,
+                \\invalid level for --{s}
+                \\
+                \\  got: {s}
+                \\
+                \\Unknown level:
+                \\  {s}
+                \\
+                \\Known levels:
+                \\  {s}
+                \\
+                \\Expected:
+                \\  --{s} <{s}>...
+            , .{ note.flag_name, note.raw, bad_val, levels_buf[0..lw.end], note.flag_name, metavar });
+            return .{ .allocator = allocator, .message = msg, .hint = null };
+        },
+        else => unreachable,
+    }
 }
 
 /// Builds unknown-command diagnostic with optional typo hint.

@@ -52,6 +52,37 @@ pub const KeyValuePair = struct {
 
 pub const KeyValueList = []const KeyValuePair;
 
+/// Example command shown in long help and generated documentation.
+pub const CliExample = struct {
+    description: []const u8 = "",
+    command: []const u8,
+};
+
+/// Metadata for one allowed key in a key-value CLI flag (e.g. `--rule <RULE=LEVEL>`).
+pub const KeyValueKeyMeta = struct {
+    name: []const u8,
+    default_value: []const u8,
+    summary: []const u8,
+    long_description: []const u8 = "",
+    group: ?[]const u8 = null,
+};
+
+/// Metadata for one allowed value (e.g. severity level).
+pub const KeyValueValueMeta = struct {
+    name: []const u8,
+    summary: []const u8,
+};
+
+/// Rich metadata for key-value flags: drives docs, completions, and optional long-help sections.
+pub const KeyValueHelp = struct {
+    keys: []const KeyValueKeyMeta,
+    values: []const KeyValueValueMeta,
+    /// Free-form note (e.g. override ordering / locked levels).
+    override_behavior_note: []const u8 = "",
+    /// Examples specific to this flag (merged with `Flag.examples` when rendering).
+    examples: []const CliExample = &.{},
+};
+
 pub const DefaultValue = union(enum) {
     bool: bool,
     string: []const u8,
@@ -93,6 +124,13 @@ pub const Flag = struct {
     /// Optional display labels for each allowed value, shown alongside the value in help output.
     /// When provided, must have the same length as `allowed_values`.
     allowed_value_labels: ?[]const []const u8 = null,
+    /// When both are set on a `.key_value_list` flag, short help uses `<KEY>=<VALUE>` instead of `value_hint` or `KEY=VALUE`.
+    key_metavar: ?[]const u8 = null,
+    value_metavar: ?[]const u8 = null,
+    /// Structured key-value documentation (rules, levels, examples). Optional; completions and docs use it when present.
+    key_value_help: ?*const KeyValueHelp = null,
+    /// Examples for this flag (long help / docs).
+    examples: ?[]const CliExample = null,
 
     /// Returns whether the flag expects a value token.
     pub fn takesValue(self: Flag) bool {
@@ -173,6 +211,10 @@ pub fn FlagOptions(comptime T: type) type {
         allowed_values_style: AllowedValuesStyle = .comma,
         /// Optional display labels for each allowed value, shown alongside the value in help output.
         allowed_value_labels: ?[]const []const u8 = null,
+        key_metavar: ?[]const u8 = null,
+        value_metavar: ?[]const u8 = null,
+        key_value_help: ?*const KeyValueHelp = null,
+        examples: ?[]const CliExample = null,
     };
 }
 
@@ -299,6 +341,11 @@ pub const Init = struct {
     description: []const u8 = "",
     /// Extended description shown only in `--help` output.
     long_description: []const u8 = "",
+    /// Root-level examples for generated docs / long help (see `CliExample`).
+    examples: ?[]const CliExample = null,
+    /// When set, `Usage` / synopsis lines use this text verbatim (may include `\\n`) instead of deriving from positionals and subcommands.
+    /// Borrowed — not freed by `Command` (`[]const u8` from string literals, `bufPrint`, or caller-owned memory that outlives the command tree).
+    usage_override: ?[]const u8 = null,
     version: ?[]const u8 = null,
     /// Author name used by generated documentation.
     author_name: []const u8 = "",
@@ -352,6 +399,10 @@ min_positionals: ?usize = null,
 max_positionals: ?usize = null,
 require_subcommand: bool = false,
 help_on_empty_args: bool = false,
+/// Borrowed pointer; see `Init.usage_override`.
+usage_override: ?[]const u8 = null,
+/// Root-level CLI examples (AsciiDoc / long help).
+examples: ?[]const CliExample = null,
 /// Set by freeze(). Prevents further structural mutations.
 frozen: bool = false,
 
@@ -364,6 +415,8 @@ pub fn init(allocator: Allocator, cfg: Init) !Command {
         .tagline = cfg.tagline,
         .description = cfg.description,
         .long_description = cfg.long_description,
+        .examples = cfg.examples,
+        .usage_override = cfg.usage_override,
         .version = cfg.version,
         .author_name = cfg.author_name,
         .author_email = cfg.author_email,
@@ -440,6 +493,10 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
         .value_hint = opts.value_hint,
         .allowed_values_style = opts.allowed_values_style,
         .allowed_value_labels = opts.allowed_value_labels,
+        .key_metavar = opts.key_metavar,
+        .value_metavar = opts.value_metavar,
+        .key_value_help = opts.key_value_help,
+        .examples = opts.examples,
     };
 
     if (value_type == .enum_tag) {

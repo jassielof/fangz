@@ -92,14 +92,13 @@ fn renderFlagCompleter(writer: *std.Io.Writer, path: []const u8, flag: Command.F
 
     try writer.print("  def {s} [] {{\n    [\n", .{name});
     if (flag.value_type == .key_value_list) {
-        if (flag.allowed_keys) |keys| {
-            if (flag.allowed_values) |values| {
-                for (keys) |key| {
-                    for (values) |value| try writer.print("      \"{s}={s}\"\n", .{ key, value });
-                }
-            } else {
-                for (keys) |key| try writer.print("      \"{s}=\"\n", .{key});
-            }
+        // Prefer `key=` suggestions so the shell can complete the level after `=` (see dynamic `__complete` too).
+        if (flag.key_value_help) |kv| {
+            for (kv.keys) |meta| try writer.print("      \"{s}=\"\n", .{meta.name});
+        } else if (flag.allowed_keys) |keys| {
+            for (keys) |key| try writer.print("      \"{s}=\"\n", .{key});
+        } else if (flag.allowed_values) |values| {
+            for (values) |value| try writer.print("      \"{s}\"\n", .{value});
         }
     } else if (flag.allowed_values) |values| {
         for (values) |value| try writer.print("      \"{s}\"\n", .{value});
@@ -108,7 +107,10 @@ fn renderFlagCompleter(writer: *std.Io.Writer, path: []const u8, flag: Command.F
 }
 
 fn hasFlagValueCompleter(flag: Command.Flag) bool {
-    if (flag.value_type == .key_value_list) return flag.allowed_keys != null or flag.allowed_values != null;
+    if (flag.value_type == .key_value_list) {
+        return flag.key_value_help != null or flag.allowed_keys != null or flag.allowed_values != null;
+    }
+
     return flag.allowed_values != null and flag.allowed_values.?.len > 0;
 }
 

@@ -1,7 +1,7 @@
 = {{ display_name }}{{ if tagline }}: {{ tagline }}{{ end }}
 {{ if author_name }}{{ author_name }}{{ if author_email }} <{{ author_email }}>{{ end }}
 {{ end }}{{ if version }}v{{ version }}{{ if source_date }}, {{ source_date }}{{ end }}{{ if git_ref }}: {{ git_ref }}{{ end }}
-{{ end }}:toc: auto
+{{ end }}:toc: {{ toc }}
 :source-highlighter: highlight.js
 :doctype: book
 
@@ -10,69 +10,182 @@
 {{ description }}
 --
 
-{{ end }}== Usage
+{{ end }}== Synopsis
 
 [source,sh]
 ----
 {{ @raw root.usage }}
 ----
 
-{{ if root.has_positionals }}== Arguments
+{{ if app_examples }}== Examples
 
-{{ range root.positionals }}`{{ @raw display }}`::
-{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
-Required: {{ required_text }} +
-Variadic: {{ variadic_text }}{{ if has_possible_values }} +
-Possible values: {{ join possible_values ", " }}{{ end }}
+{{ range app_examples }}{{ if description }}{{ description}}
 
-{{ end }}{{ end }}{{ if root.has_options }}== Options
+{{ end }}[source,sh]
+----
+{{ command }}
+----
+{{ end }}{{ end }}{{ if root.has_positionals }}== Arguments
 
-{{ range root.options }}`{{ @raw full_signature }}`::
-{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
-Required: {{ required_text }}{{ if has_default }} +
-Default: `{{ default_value }}`{{ end }}{{ if has_possible_values }} +
-Possible values: {{ join possible_values ", " }}{{ end }} +
-Scope: {{ scope }}
+{{ range root.positionals }}=== `{{ @raw display }}`
 
-{{ end }}{{ end }}== Command Reference
+{{ description }}
 
-{{ range commands_flat }}[#{{ anchor }}]
+{{ if required }}*Required* when present in the synopsis.{{ end }}
+{{ if variadic }}*Variadic:* accepts multiple values.{{ end }}
+{{ if has_possible_values }}*Possible values:* `{{ join possible_values "`, `" }}`
+{{ end }}
+{{ end }}{{ end }}{{ if root.has_options }}== Global options
+
+{{ range root.options }}=== `{{ @raw full_signature }}`
+
+{{ description }}
+
+{{ if extended }}
+
+{{ extended }}
+{{ end }}{{ if has_key_value_metadata }}==== Severity levels
+
+[cols="1,4"]
+|===
+| Level | Meaning
+{{ range kv_values }}
+| `{{ name }}`
+| {{ summary }}
+{{ end }}
+|===
+
+==== Rules and defaults
+
+[cols="2,1,5"]
+|===
+| Rule | Default | Description
+{{ range kv_keys }}
+| `{{ name }}`
+| `{{ default_value }}`
+| {{ summary }}
+{{ end }}
+|===
+
+{{ if kv_override_note }}==== Override behavior
+
+{{ kv_override_note }}
+{{ end }}{{ end }}{{ if has_default }}*Default:* `{{ default_value }}`
+{{ end }}{{ if has_possible_values }}*Possible values:* `{{ join possible_values "`, `" }}`
+{{ end }}*Scope:* `{{ scope }}`
+
+{{ if flag_examples }}==== Examples
+
+{{ range flag_examples }}{{ if description }}{{ description}}
+
+{{ end }}[source,sh]
+----
+{{ command }}
+----
+{{ end }}{{ end }}{{ if kv_examples }}==== More examples
+
+{{ range kv_examples }}{{ if description }}{{ description}}
+
+{{ end }}[source,sh]
+----
+{{ command }}
+----
+{{ end }}{{ end }}
+{{ end }}{{ end }}{{ if include_command_index }}== Command index
+
+{{ command_index }}
+{{ end }}== Commands
+
+{{ range root.subcommands }}* xref:{{ anchor }}[`{{ @raw display_path }}`]{{ if description }} — {{ description }}{{ end }}
+{{ end }}* xref:{{ help_command_anchor }}[`{{ binary_name }} help`] — Print this message or the help of the given subcommand(s)
+
+== Command reference
+
+{{ range subcommand_reference }}[#{{ anchor }}]
 === `{{ @raw display_path }}`
 
 {{ if description }}{{ description }}
 {{ else }}No description.
 {{ end }}{{ if long_description }}
+
 {{ long_description }}
 {{ end }}{{ if has_parent }}
+
 Parent: xref:{{ parent_anchor }}[`{{ @raw parent_display_path }}`]
-{{ end }}
-==== Usage
+{{ end }}==== Synopsis
 
 [source,sh]
 ----
 {{ @raw usage }}
 ----
 
-{{ if has_positionals }}==== Arguments
+{{ if has_positionals }}===== Arguments
 
-{{ range positionals }}`{{ @raw display }}`::
-{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
-Required: {{ required_text }} +
-Variadic: {{ variadic_text }}{{ if has_possible_values }} +
-Possible values: {{ join possible_values ", " }}{{ end }}
+{{ range positionals }}====== `{{ @raw display }}`
 
-{{ end }}{{ end }}{{ if has_options }}==== Options
+{{ description }}
 
-{{ range options }}`{{ @raw full_signature }}`::
-{{ if description }}{{ description }}{{ else }}No description.{{ end }} +
-Required: {{ required_text }}{{ if has_default }} +
-Default: `{{ default_value }}`{{ end }}{{ if has_possible_values }} +
-Possible values: {{ join possible_values ", " }}{{ end }} +
-Scope: {{ scope }}
+{{ if has_possible_values }}*Possible values:* `{{ join possible_values "`, `" }}`
+{{ end }}
+{{ end }}{{ end }}{{ if has_options }}===== Options
 
-{{ end }}{{ end }}{{ if has_subcommands }}==== Subcommands
+{{ range options }}====== `{{ @raw full_signature }}`
 
-{{ range subcommands }}* xref:{{ anchor }}[`{{ @raw display_path }}`]{{ if description }} - {{ description }}{{ end }}
+{{ description }}
+
+{{ if extended }}
+
+{{ extended }}
+{{ end }}{{ if has_key_value_metadata }}======= Severity levels
+
+[cols="1,4"]
+|===
+| Level | Meaning
+{{ range kv_values }}
+| `{{ name }}`
+| {{ summary }}
+{{ end }}
+|===
+
+======= Rules and defaults
+
+[cols="2,1,5"]
+|===
+| Rule | Default | Description
+{{ range kv_keys }}
+| `{{ name }}`
+| `{{ default_value }}`
+| {{ summary }}
+{{ end }}
+|===
+
+{{ if kv_override_note }}======= Override behavior
+
+{{ kv_override_note }}
+{{ end }}{{ end }}{{ if has_default }}*Default:* `{{ default_value }}`
+{{ end }}{{ if has_possible_values }}*Possible values:* `{{ join possible_values "`, `" }}`
+{{ end }}*Scope:* `{{ scope }}`
+
+{{ if flag_examples }}======= Examples
+
+{{ range flag_examples }}{{ if description }}{{ description}}
+
+{{ end }}[source,sh]
+----
+{{ command }}
+----
+{{ end }}{{ end }}{{ if kv_examples }}======= More examples
+
+{{ range kv_examples }}{{ if description }}{{ description}}
+
+{{ end }}[source,sh]
+----
+{{ command }}
+----
+{{ end }}{{ end }}
+{{ end }}{{ end }}{{ if has_subcommands }}===== Subcommands
+
+{{ range subcommands }}* xref:{{ anchor }}[`{{ @raw display_path }}`]{{ if description }} — {{ description }}{{ end }}
 {{ end }}
 {{ end }}
 {{ end }}

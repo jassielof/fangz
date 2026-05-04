@@ -339,7 +339,6 @@ test "doc generator renders nested commands as flat reference entries" {
 
     const doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/cli.adoc");
     defer testing.allocator.free(doc);
-    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-fangz]") != null);
     try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-fangz-remote]") != null);
     try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-fangz-remote-add]") != null);
     try testing.expect(std.mem.indexOf(u8, doc, "=== `fangz remote add`") != null);
@@ -377,4 +376,119 @@ test "app docs include configured author and revision metadata" {
 
 fn readFileAlloc(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
+}
+
+test "key-value list flag parses repeated pairs" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    try app.root().addFlag([]const fangz.KeyValuePair, .{
+        .name = "rule",
+        .short = 'r',
+        .allowed_keys = &.{ "alpha", "beta" },
+        .allowed_values = &.{ "allow", "deny" },
+    });
+    try app.root_command.freeze();
+
+    var out = try fangz.Parser.parse(testing.allocator, testing.io, app.root(), &.{
+        "--rule", "alpha=allow",
+        "-r",     "beta=deny",
+    });
+    defer out.context.deinit();
+
+    const pairs = out.context.keyValueFlag("rule").?;
+    try testing.expectEqual(@as(usize, 2), pairs.len);
+    try testing.expectEqualStrings("alpha", pairs[0].key);
+    try testing.expectEqualStrings("allow", pairs[0].value);
+    try testing.expectEqualStrings("beta", pairs[1].key);
+    try testing.expectEqualStrings("deny", pairs[1].value);
+}
+
+test "key-value flag diagnostic when equals is missing" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    try app.root().addFlag([]const fangz.KeyValuePair, .{
+        .name = "rule",
+        .allowed_keys = &.{ "alpha", "beta" },
+        .allowed_values = &.{ "allow", "deny" },
+        .key_metavar = "RULE",
+        .value_metavar = "LEVEL",
+    });
+    try app.root_command.freeze();
+
+    const argv: []const []const u8 = &.{ "--rule", "onlykey" };
+    _ = fangz.Parser.parse(testing.allocator, testing.io, app.root(), argv) catch |err| {
+        const pe: fangz.Parser.ParseError = switch (err) {
+            error.KeyValueMissingEquals => error.KeyValueMissingEquals,
+            else => return err,
+        };
+        var diag = try fangz.Parser.diagnoseError(testing.allocator, app.root(), argv, pe);
+        defer diag.deinit();
+        try testing.expect(std.mem.indexOf(u8, diag.message, "invalid format") != null);
+        try testing.expect(std.mem.indexOf(u8, diag.message, "RULE=LEVEL") != null);
+        try testing.expect(std.mem.indexOf(u8, diag.message, "onlykey") != null);
+        return;
+    };
+    return error.TestExpectedError;
+}
+
+test "key-value flag diagnostic for unknown key includes suggestion" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    try app.root().addFlag([]const fangz.KeyValuePair, .{
+        .name = "rule",
+        .allowed_keys = &.{ "alpha", "beta" },
+        .allowed_values = &.{ "allow", "deny" },
+        .key_metavar = "RULE",
+        .value_metavar = "LEVEL",
+    });
+    try app.root_command.freeze();
+
+    const argv: []const []const u8 = &.{ "--rule", "alph=allow" };
+    _ = fangz.Parser.parse(testing.allocator, testing.io, app.root(), argv) catch |err| {
+        const pe: fangz.Parser.ParseError = switch (err) {
+            error.InvalidAllowedKey => error.InvalidAllowedKey,
+            else => return err,
+        };
+        var diag = try fangz.Parser.diagnoseError(testing.allocator, app.root(), argv, pe);
+        defer diag.deinit();
+        try testing.expect(std.mem.indexOf(u8, diag.message, "invalid rule") != null);
+        try testing.expect(std.mem.indexOf(u8, diag.message, "alph") != null);
+        try testing.expect(diag.hint != null);
+        try testing.expect(std.mem.indexOf(u8, diag.hint.?, "alpha") != null);
+        return;
+    };
+    return error.TestExpectedError;
+}
+
+test "key-value flag diagnostic for unknown value lists allowed levels" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    try app.root().addFlag([]const fangz.KeyValuePair, .{
+        .name = "rule",
+        .allowed_keys = &.{ "alpha", "beta" },
+        .allowed_values = &.{ "allow", "deny" },
+        .key_metavar = "RULE",
+        .value_metavar = "LEVEL",
+    });
+    try app.root_command.freeze();
+
+    const argv: []const []const u8 = &.{ "--rule", "alpha=nope" };
+    _ = fangz.Parser.parse(testing.allocator, testing.io, app.root(), argv) catch |err| {
+        const pe: fangz.Parser.ParseError = switch (err) {
+            error.InvalidAllowedValue => error.InvalidAllowedValue,
+            else => return err,
+        };
+        var diag = try fangz.Parser.diagnoseError(testing.allocator, app.root(), argv, pe);
+        defer diag.deinit();
+        try testing.expect(std.mem.indexOf(u8, diag.message, "invalid level") != null);
+        try testing.expect(std.mem.indexOf(u8, diag.message, "nope") != null);
+        try testing.expect(std.mem.indexOf(u8, diag.message, "allow") != null);
+        try testing.expect(std.mem.indexOf(u8, diag.message, "deny") != null);
+        return;
+    };
+    return error.TestExpectedError;
 }

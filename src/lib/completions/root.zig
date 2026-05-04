@@ -233,6 +233,14 @@ fn suggestFlagValues(
         if (std.mem.indexOfScalar(u8, value_prefix, '=')) |kv_eq| {
             const key = value_prefix[0..kv_eq];
             const val_prefix = value_prefix[kv_eq + 1 ..];
+            if (flag.key_value_help) |kv| {
+                for (kv.values) |meta| {
+                    if (val_prefix.len == 0 or std.mem.startsWith(u8, meta.name, val_prefix)) {
+                        try writer.print("{s}{s}={s}\n", .{ name_prefix, key, meta.name });
+                    }
+                }
+                return;
+            }
             if (flag.allowed_values) |vals| {
                 for (vals) |v| {
                     if (val_prefix.len == 0 or std.mem.startsWith(u8, v, val_prefix)) {
@@ -241,6 +249,14 @@ fn suggestFlagValues(
                 }
             }
         } else {
+            if (flag.key_value_help) |kv| {
+                for (kv.keys) |meta| {
+                    if (value_prefix.len == 0 or std.mem.startsWith(u8, meta.name, value_prefix)) {
+                        try writer.print("{s}{s}=\t{s}\t{s}\n", .{ name_prefix, meta.name, meta.default_value, meta.summary });
+                    }
+                }
+                return;
+            }
             if (flag.allowed_keys) |keys| {
                 for (keys) |k| {
                     if (value_prefix.len == 0 or std.mem.startsWith(u8, k, value_prefix)) {
