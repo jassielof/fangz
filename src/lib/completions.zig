@@ -1,18 +1,17 @@
 //! Shell completion script generation and runtime suggestion endpoint.
 //!
-//! This module provides script emitters for multiple shells and a shared
-//! `__complete` runtime suggestion path.
+//! This module provides script emitters for multiple shells and a shared `__complete` runtime suggestion path.
 
 const std = @import("std");
 
-const Command = @import("../Command.zig");
-const ParseContext = @import("../ParseContext.zig");
+const Command = @import("Command.zig");
+const ParseContext = @import("ParseContext.zig");
 
-pub const bash = @import("bash.zig");
-pub const fish = @import("fish.zig");
-pub const nu = @import("nu.zig");
-pub const pwsh = @import("pwsh.zig");
-pub const zsh = @import("zsh.zig");
+pub const bash = @import("completions/bash.zig");
+pub const fish = @import("completions/fish.zig");
+pub const nu = @import("completions/nu.zig");
+pub const pwsh = @import("completions/pwsh.zig");
+pub const zsh = @import("completions/zsh.zig");
 
 /// Supported shell targets for completion script generation.
 pub const Shell = enum {

@@ -1,11 +1,10 @@
 const std = @import("std");
 const testing = std.testing;
-const refAllDecls = testing.refAllDecls;
 
 const fangz = @import("fangz");
 
 comptime {
-    refAllDecls(@This());
+    testing.refAllDecls(@This());
 }
 
 fn makeApp() !fangz.App {

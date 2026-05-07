@@ -8,7 +8,7 @@ const carnaval = @import("carnaval");
 const meta = @import("fangz_meta");
 
 const Command = @import("Command.zig");
-const Completion = @import("completions/root.zig");
+const Completion = @import("completions.zig");
 const DocGenerator = @import("DocGenerator.zig");
 const errors = @import("errors.zig");
 const Error = errors.Error;
