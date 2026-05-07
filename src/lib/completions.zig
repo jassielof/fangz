@@ -5,13 +5,12 @@
 const std = @import("std");
 
 const Command = @import("Command.zig");
-const ParseContext = @import("ParseContext.zig");
-
 pub const bash = @import("completions/bash.zig");
 pub const fish = @import("completions/fish.zig");
 pub const nu = @import("completions/nu.zig");
 pub const pwsh = @import("completions/pwsh.zig");
 pub const zsh = @import("completions/zsh.zig");
+const ParseContext = @import("ParseContext.zig");
 
 /// Supported shell targets for completion script generation.
 pub const Shell = enum {
@@ -141,11 +140,13 @@ pub fn printDynamicSuggestions(io: std.Io, root: *Command, args: []const []const
 
     const active = activeCommand(root, args);
     const prefix = if (args.len > 0) args[args.len - 1] else "";
+
     if (std.mem.startsWith(u8, prefix, "-")) {
         try suggestFlags(writer, active, prefix);
     } else {
         try suggestCommands(writer, active, prefix);
     }
+
     try out.interface.flush();
 }
 
@@ -172,6 +173,7 @@ fn suggestCommands(writer: *std.Io.Writer, cmd: *const Command, prefix: []const 
             try writer.print("{s}\n", .{sub.name});
         }
     }
+
     if (prefix.len == 0 or std.mem.startsWith(u8, "help", prefix)) {
         try writer.print("help\n", .{});
     }
@@ -200,7 +202,9 @@ fn suggestFlags(writer: *std.Io.Writer, cmd: *const Command, prefix: []const u8)
     }
 
     if (std.mem.startsWith(u8, "--help", prefix)) try writer.print("--help\n", .{});
+
     if (std.mem.startsWith(u8, "-h", prefix)) try writer.print("-h\n", .{});
+
     if (cmd.parent == null and cmd.rootConst().version != null) {
         if (std.mem.startsWith(u8, "--version", prefix)) try writer.print("--version\n", .{});
         if (std.mem.startsWith(u8, "-V", prefix)) try writer.print("-V\n", .{});

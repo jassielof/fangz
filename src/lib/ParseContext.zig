@@ -189,9 +189,11 @@ fn assignFieldValue(
     comptime FieldType: type,
 ) !bool {
     var name_buf: [field_name.len]u8 = undefined;
+
     inline for (field_name, 0..) |ch, i| {
         name_buf[i] = if (ch == '_') '-' else ch;
     }
+
     const name = name_buf[0..];
     const base = unwrapOptional(FieldType);
 
@@ -204,6 +206,7 @@ fn assignFieldValue(
             @field(out.*, field_name) = null;
             return true;
         }
+
         if (comptime isStringSlice(base)) {
             if (self.stringFlag(name)) |value| {
                 @field(out.*, field_name) = value;
@@ -212,7 +215,8 @@ fn assignFieldValue(
             @field(out.*, field_name) = null;
             return true;
         }
-        @compileError("unsupported optional field type in extract: " ++ @typeName(FieldType));
+
+        @compileError("Unsupported optional field type in extract: " ++ @typeName(FieldType));
     }
 
     if (comptime FieldType == bool) {
@@ -260,6 +264,7 @@ fn assignFieldValue(
             @field(out.*, field_name) = value;
             return true;
         }
+
         return false;
     }
 
@@ -268,10 +273,11 @@ fn assignFieldValue(
             @field(out.*, field_name) = value;
             return true;
         }
+
         return false;
     }
 
-    @compileError("unsupported extract field type: " ++ @typeName(FieldType));
+    @compileError("Unsupported extract field type: " ++ @typeName(FieldType));
 }
 
 /// Extracts typed arguments from parsed context into a struct.
@@ -291,11 +297,14 @@ pub fn extract(self: *const ParseContext, comptime T: type) !T {
             if (FieldType != []const []const u8) {
                 @compileError("field 'positionals' must be []const []const u8");
             }
+
             @field(out, field.name) = self.positionals.items;
+
             continue;
         }
 
         const assigned = try assignFieldValue(self, &out, field.name, FieldType);
+
         if (!assigned) {
             if (field.defaultValue()) |default_ptr| {
                 @field(out, field.name) = default_ptr;

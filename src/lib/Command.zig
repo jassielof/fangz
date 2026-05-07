@@ -624,16 +624,18 @@ fn setFrozenRecursive(self: *Command) void {
 
 /// Returns true when this command has any user-visible options.
 ///
-/// Shared by HelpRenderer and DocGenerator to determine whether `[OPTIONS]` appears in the usage line, ensuring both renderers use identical logic.
+/// Shared by `HelpRenderer` and `DocGenerator` to determine whether `[OPTIONS]` appears in the usage line, ensuring both renderers use identical logic.
 pub fn hasAnyOptions(self: *const Command) bool {
     if (self.flags.len > 0) return true;
     if (self.rootConst().version != null) return true;
     var current = self.parent;
+
     while (current) |p| : (current = p.parent) {
         for (p.flags.constSlice()) |flag| {
             if (flag.persistent) return true;
         }
     }
+
     return true; // --help is always present
 }
 
