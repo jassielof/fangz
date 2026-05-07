@@ -2,13 +2,18 @@
 //!
 //! Fangz converts the parser/runtime command tree into a render-friendly documentation model, then renders a single AsciiDoc file with Trama.
 
-// TODO: Move a lot of this into the docs directory or something much better called, and use file-based structs. For better organization.
 const std = @import("std");
 
-const trama = @import("trama");
 const meta = @import("fangz_meta");
+const trama = @import("trama");
 
 const Command = @import("Command.zig");
+pub const CommandDoc = @import("docs/Command.zig");
+pub const FlagDoc = @import("docs/Flag.zig");
+pub const DocumentModel = @import("docs/Model.zig");
+pub const Options = @import("docs/Options.zig");
+pub const PositionalDoc = @import("docs/Positional.zig");
+pub const SubcommandDoc = @import("docs/Subcommand.zig");
 const ParseContext = @import("ParseContext.zig");
 
 const ListWriter = struct {
@@ -24,186 +29,6 @@ const ListWriter = struct {
     }
 };
 
-/// Options for AsciiDoc documentation generation.
-pub const Options = struct {
-    /// Output directory.
-    output_dir: []const u8 = "docs",
-    /// Output file name.
-    single_file_name: []const u8 = "cli.adoc",
-    /// Optional custom Trama template path.
-    template_path: ?[]const u8 = null,
-    /// When true, hidden commands are included.
-    include_hidden: bool = false,
-    /// When true, existing files are overwritten.
-    overwrite: bool = true,
-    /// When true, emits a redundant command index (AsciiDoc ToC is preferred).
-    include_command_index: bool = false,
-    /// AsciiDoc `toc` placement (e.g. `auto`, `left`).
-    toc: []const u8 = "auto",
-};
-
-pub const DocumentModel = struct {
-    binary_name: []const u8,
-    display_name: []const u8,
-    title: []const u8,
-    tagline: []const u8,
-    subtitle: []const u8,
-    description: []const u8,
-    version: []const u8,
-    author_name: []const u8 = "",
-    author_email: []const u8 = "",
-    git_branch: []const u8 = "",
-    git_commit: []const u8 = "",
-    git_ref: []const u8,
-    source_date: []const u8 = "",
-    app_name_attribute: []const u8,
-    include_command_index: bool,
-    command_index: []const u8,
-    toc: []const u8,
-    app_examples: []const Command.CliExample,
-    /// AsciiDoc anchor for `doc help` (xref target).
-    help_command_anchor: []const u8,
-    root: CommandDoc,
-    /// Subcommands and `help` — excludes the root entry; used for the reference section without duplicating root.
-    subcommand_reference: []const CommandDoc,
-    commands_flat: []CommandDoc,
-
-    fn deinit(self: *DocumentModel, allocator: std.mem.Allocator) void {
-        allocator.free(self.title);
-        allocator.free(self.git_ref);
-        allocator.free(self.command_index);
-        allocator.free(self.help_command_anchor);
-        for (self.commands_flat) |*cmd| cmd.deinit(allocator);
-        allocator.free(self.commands_flat);
-    }
-};
-
-pub const CommandDoc = struct {
-    name: []const u8,
-    display_path: []const u8,
-    path_parts: []const []const u8,
-    anchor: []const u8,
-    depth: usize,
-    description: []const u8,
-    long_description: []const u8,
-    usage: []const u8,
-    parent_display_path: []const u8,
-    parent_anchor: []const u8,
-    has_parent: bool,
-    positionals: []PositionalDoc,
-    has_positionals: bool,
-    options: []FlagDoc,
-    has_options: bool,
-    subcommands: []SubcommandDoc,
-    has_subcommands: bool,
-
-    fn empty() CommandDoc {
-        return .{
-            .name = "",
-            .display_path = "",
-            .path_parts = &.{},
-            .anchor = "",
-            .depth = 0,
-            .description = "",
-            .long_description = "",
-            .usage = "",
-            .parent_display_path = "",
-            .parent_anchor = "",
-            .has_parent = false,
-            .positionals = &.{},
-            .has_positionals = false,
-            .options = &.{},
-            .has_options = false,
-            .subcommands = &.{},
-            .has_subcommands = false,
-        };
-    }
-
-    fn deinit(self: *CommandDoc, allocator: std.mem.Allocator) void {
-        allocator.free(self.display_path);
-        allocator.free(self.path_parts);
-        allocator.free(self.anchor);
-        allocator.free(self.usage);
-        if (self.has_parent) {
-            allocator.free(self.parent_display_path);
-            allocator.free(self.parent_anchor);
-        }
-        for (self.positionals) |*pos| pos.deinit(allocator);
-        allocator.free(self.positionals);
-        for (self.options) |*flag| flag.deinit(allocator);
-        allocator.free(self.options);
-        for (self.subcommands) |*sub| sub.deinit(allocator);
-        allocator.free(self.subcommands);
-    }
-};
-
-pub const PositionalDoc = struct {
-    name: []const u8,
-    display: []const u8,
-    description: []const u8,
-    required: bool,
-    required_text: []const u8,
-    variadic: bool,
-    variadic_text: []const u8,
-    value_hint: []const u8,
-    possible_values: []const []const u8,
-    has_possible_values: bool,
-
-    fn deinit(self: *PositionalDoc, allocator: std.mem.Allocator) void {
-        allocator.free(self.display);
-    }
-};
-
-pub const FlagDoc = struct {
-    name: []const u8,
-    short: []const u8,
-    long_display: []const u8,
-    full_signature: []const u8,
-    /// One-line summary (typically `Flag.description`).
-    description: []const u8,
-    /// Extra prose (`Flag.long_description`).
-    extended: []const u8,
-    type_name: []const u8,
-    required: bool,
-    required_text: []const u8,
-    default_value: []const u8,
-    has_default: bool,
-    scope: []const u8,
-    value_hint: []const u8,
-    value_hint_owned: ?[]const u8 = null,
-    possible_values: []const []const u8,
-    has_possible_values: bool,
-    is_bool: bool,
-    is_builtin: bool,
-    is_repeatable: bool,
-    has_key_value_metadata: bool,
-    kv_keys: []const Command.KeyValueKeyMeta,
-    kv_values: []const Command.KeyValueValueMeta,
-    kv_override_note: []const u8,
-    flag_examples: []const Command.CliExample,
-    kv_examples: []const Command.CliExample,
-
-    fn deinit(self: *FlagDoc, allocator: std.mem.Allocator) void {
-        if (self.value_hint_owned) |s| allocator.free(s);
-        allocator.free(self.short);
-        allocator.free(self.long_display);
-        allocator.free(self.full_signature);
-        allocator.free(self.default_value);
-    }
-};
-
-pub const SubcommandDoc = struct {
-    name: []const u8,
-    display_path: []const u8,
-    anchor: []const u8,
-    description: []const u8,
-
-    fn deinit(self: *SubcommandDoc, allocator: std.mem.Allocator) void {
-        allocator.free(self.display_path);
-        allocator.free(self.anchor);
-    }
-};
-
 /// Generates AsciiDoc documentation for the given command hierarchy.
 pub fn generateDocs(
     allocator: std.mem.Allocator,
@@ -214,7 +39,12 @@ pub fn generateDocs(
     _ = options.include_hidden;
     try std.Io.Dir.cwd().createDirPath(io, options.output_dir);
 
-    const doc = try renderSingleFile(allocator, io, root, options);
+    const doc = try renderSingleFile(
+        allocator,
+        // io,
+        root,
+        options,
+    );
     defer allocator.free(doc);
 
     const output_path = try std.fs.path.join(allocator, &.{ options.output_dir, options.single_file_name });
@@ -222,49 +52,28 @@ pub fn generateDocs(
     try writeFile(io, output_path, doc, options.overwrite);
 }
 
-const package_default_template_path = "src/lib/templates/default.adoc";
-
 fn renderSingleFile(
     allocator: std.mem.Allocator,
-    io: std.Io,
+    // io: std.Io,
     root: *const Command,
     options: Options,
 ) ![]u8 {
     var model = try buildDocumentModel(allocator, root, options);
     defer model.deinit(allocator);
 
-    const template = if (options.template_path) |path|
-        try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited)
-    else
-        try readDefaultTemplate(io, allocator);
-    defer allocator.free(template);
-
-    // Pass by pointer so Trama does not stack-copy the large `DocumentModel`.
-    return trama.renderAlloc(allocator, default_template, &model, .{ .escape_mode = .asciidoc });
+    return trama.renderAlloc(
+        allocator,
+        @embedFile("templates/default.adoc"),
+        &model,
+        .{ .escape_mode = .asciidoc },
+    );
 }
 
-const default_template = @embedFile("templates/default.adoc");
-
-fn readDefaultTemplate(io: std.Io, allocator: std.mem.Allocator) ![]u8 {
-    return readTemplatePath(io, allocator, meta.default_template_path) catch |first_err| {
-        if (std.mem.eql(u8, meta.default_template_path, package_default_template_path)) return first_err;
-        return readTemplatePath(io, allocator, package_default_template_path);
-    };
-}
-
-fn readTemplatePath(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    if (!std.fs.path.isAbsolute(path)) {
-        return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
-    }
-
-    const dir_path = std.fs.path.dirname(path) orelse return error.FileNotFound;
-    const file_name = std.fs.path.basename(path);
-    var dir = try std.Io.Dir.openDirAbsolute(io, dir_path, .{});
-    defer dir.close(io);
-    return dir.readFileAlloc(io, file_name, allocator, .unlimited);
-}
-
-fn buildDocumentModel(allocator: std.mem.Allocator, root: *const Command, options: Options) !DocumentModel {
+fn buildDocumentModel(
+    allocator: std.mem.Allocator,
+    root: *const Command,
+    options: Options,
+) !DocumentModel {
     var commands = try std.ArrayList(CommandDoc).initCapacity(allocator, 8);
     errdefer {
         for (commands.items) |*cmd| cmd.deinit(allocator);
