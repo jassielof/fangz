@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const git = @import("git.build.zig");
+const git = @import("git.zig");
 
 const PartialManifest = struct {
     version: []const u8 = "",
@@ -13,6 +13,7 @@ pub fn sourceDate(b: *std.Build) []const u8 {
 }
 
 // TODO: Rename to default docs template, otherwise sounds too generic
+// TODO: There's no need 
 pub fn defaultTemplatePath(b: *std.Build, fangz_mod: ?*std.Build.Module) []const u8 {
     if (fangz_mod) |mod| {
         if (mod.root_source_file) |root_source_file| {

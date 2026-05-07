@@ -240,8 +240,10 @@ fn renderSingleFile(
     defer allocator.free(template);
 
     // Pass by pointer so Trama does not stack-copy the large `DocumentModel`.
-    return trama.renderAlloc(allocator, template, &model, .{ .escape_mode = .asciidoc });
+    return trama.renderAlloc(allocator, default_template, &model, .{ .escape_mode = .asciidoc });
 }
+
+const default_template = @embedFile("templates/default.adoc");
 
 fn readDefaultTemplate(io: std.Io, allocator: std.mem.Allocator) ![]u8 {
     return readTemplatePath(io, allocator, meta.default_template_path) catch |first_err| {

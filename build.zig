@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const git = @import("git.build.zig");
-const metadata = @import("metadata.build.zig");
+const git = @import("build/git.zig");
+const metadata = @import("build/metadata.zig");
 pub const injectMetadata = metadata.injectMetadata;
 
 pub fn build(b: *std.Build) void {
