@@ -44,6 +44,7 @@ pub fn empty() Command {
         .has_subcommands = false,
     };
 }
+
 pub fn deinit(self: *Command, allocator: std.mem.Allocator) void {
     allocator.free(self.display_path);
     allocator.free(self.path_parts);

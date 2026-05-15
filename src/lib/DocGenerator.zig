@@ -132,7 +132,7 @@ fn buildDocumentModel(
         .app_name_attribute = root.name,
         .include_command_index = options.include_command_index,
         .command_index = command_index,
-        .toc = options.toc,
+        .toc = options.toc_position,
         .app_examples = root.examples orelse &.{},
         .help_command_anchor = help_command_anchor,
         .root = if (commands_flat.len > 0) commands_flat[0] else CommandDoc.empty(),

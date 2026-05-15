@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Subcommand = @This();
+
 name: []const u8,
 display_path: []const u8,
 anchor: []const u8,
