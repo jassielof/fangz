@@ -13,7 +13,7 @@ pub fn sourceDate(b: *std.Build) []const u8 {
 }
 
 // TODO: Rename to default docs template, otherwise sounds too generic
-// TODO: There's no need 
+// TODO: There's no need use this anymore, it should be removed. Zig has `@embedFile()`.
 pub fn defaultTemplatePath(b: *std.Build, fangz_mod: ?*std.Build.Module) []const u8 {
     if (fangz_mod) |mod| {
         if (mod.root_source_file) |root_source_file| {
@@ -44,6 +44,20 @@ pub fn buildDate(b: *std.Build) []const u8 {
 }
 
 pub fn manifestVersion(b: *std.Build) ?[]const u8 {
+    const manifest = manifestMetadata(b) orelse return null;
+    defer std.zon.parse.free(b.allocator, manifest);
+
+    return if (manifest.version.len > 0) b.dupe(manifest.version) else null;
+}
+
+pub fn manifestDescription(b: *std.Build) ?[]const u8 {
+    const manifest = manifestMetadata(b) orelse return null;
+    defer std.zon.parse.free(b.allocator, manifest);
+
+    return if (manifest.description.len > 0) b.dupe(manifest.description) else null;
+}
+
+fn manifestMetadata(b: *std.Build) ?PartialManifest {
     const content = b.build_root.handle.readFileAlloc(
         b.graph.io,
         "build.zig.zon",
@@ -68,9 +82,8 @@ pub fn manifestVersion(b: *std.Build) ?[]const u8 {
             .free_on_error = true,
         },
     ) catch return null;
-    defer std.zon.parse.free(b.allocator, manifest);
 
-    return if (manifest.version.len > 0) b.dupe(manifest.version) else null;
+    return manifest;
 }
 
 fn compileVersion(b: *std.Build, compile: *std.Build.Step.Compile) ?[]const u8 {
@@ -110,6 +123,7 @@ pub fn injectMetadata(
 
     options.addOption([]const u8, "name", compile.name);
     options.addOption([]const u8, "version", compileVersion(b, compile) orelse manifestVersion(b) orelse "");
+    options.addOption([]const u8, "description", manifestDescription(b) orelse "");
     options.addOption([]const u8, "author_name", git.commitAuthor(b) orelse "");
     options.addOption([]const u8, "author_email", git.commitEmail(b) orelse "");
     options.addOption([]const u8, "commit", git.extractCommit(b));

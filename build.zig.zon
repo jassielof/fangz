@@ -1,5 +1,6 @@
 .{
     .name = .fangz,
+    .description = "Docent is a documentation linter for Zig projects.",
     .version = "0.1.0",
     .fingerprint = 0x8bef66fe5adfd67d,
     .minimum_zig_version = "0.16.0",

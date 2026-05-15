@@ -61,6 +61,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: AppOptions) Error!App
     const author_name = cfg.author_name orelse meta.author_name;
     const author_email = cfg.author_email orelse meta.author_email;
     const source_date = cfg.source_date orelse meta.source_date;
+    const description = if (cfg.description.len > 0) cfg.description else meta.description;
 
     return .{
         .allocator = allocator,
@@ -71,7 +72,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: AppOptions) Error!App
             .name = name,
             .display_name = display_name,
             .tagline = cfg.tagline,
-            .description = cfg.description,
+            .description = description,
             .version = version,
             .author_name = author_name,
             .author_email = author_email,

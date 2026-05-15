@@ -38,6 +38,7 @@ pub fn build(b: *std.Build) void {
 
     default_meta.addOption([]const u8, "name", mod_name);
     default_meta.addOption([]const u8, "version", metadata.manifestVersion(b) orelse "");
+    default_meta.addOption([]const u8, "description", metadata.manifestDescription(b) orelse "");
     default_meta.addOption([]const u8, "author_name", "");
     default_meta.addOption([]const u8, "author_email", "");
     default_meta.addOption([]const u8, "commit", "");
