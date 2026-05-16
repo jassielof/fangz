@@ -533,6 +533,7 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
     }
 
     if (self.flag_by_name.contains(flag.name)) return error.DuplicateFlag;
+    // FIXME: It should throw an error describing it's a short flag duplication, not just a generic flag duplication error, and if possible, show the the conflict.
     if (flag.short) |short| {
         if (self.flag_by_short.contains(short)) return error.DuplicateFlag;
     }
