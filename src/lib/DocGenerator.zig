@@ -41,7 +41,6 @@ pub fn generateDocs(
 
     const doc = try renderSingleFile(
         allocator,
-        // io,
         root,
         options,
     );
@@ -54,7 +53,6 @@ pub fn generateDocs(
 
 fn renderSingleFile(
     allocator: std.mem.Allocator,
-    // io: std.Io,
     root: *const Command,
     options: Options,
 ) ![]u8 {
