@@ -10,43 +10,20 @@ const Command = @import("Command.zig");
 /// Controls the verbosity of the rendered help output.
 ///
 /// - `.short` — compact output triggered by `-h`: synopsis, argument list, flag list with one-liner summaries only.
-/// - `.full`  — complete output triggered by `--help` or `help <cmd>`: same asshort plus per-flag `long_description` and per-command `long_description`.
+/// - `.full`  — complete output triggered by `--help` or `help <cmd>`: same as short plus per-flag `long_description` and per-command `long_description`.
 pub const HelpMode = enum { short, full };
-// FIXME: For example:
-//
-// ```zig
-// zig build cli -- completions --help
-// completion
-// Generate shell completion scripts
-
-// Aliases:
-//   completions
-
-// Usage: completion [OPTIONS] <shell>
-
-// Arguments:
-//   <shell>  Target shell. One of:
-//              • bash  Bash
-//              • zsh   Zsh
-//              • fish  Fish
-//              • pwsh  PowerShell
-//              • nu    Nushell
-
-// Options:
-//   -h, --help  Print help
-// ```
-//
-// it's not rendering fully, the first line after the command call, it only shows the last command, not the full command, it should show `docent completions` instead of just `completion`
-// TODO: Fix writer bad types, it should properly take the new writergate interface
 
 /// Renders command help sections to the provided writer.
 pub fn render(
-    writer: anytype,
+    writer: *std.Io.Writer,
     command: *const Command,
     profile: ColorProfile,
     mode: HelpMode,
 ) !void {
-    try carnaval.Style.init().bolded().renderWithProfile(command.name, writer, profile);
+    const display_path = try commandDisplayPath(command.allocator, command);
+    defer command.allocator.free(display_path);
+
+    try carnaval.Style.init().bolded().renderWithProfile(display_path, writer, profile);
     try writer.print("\n", .{});
 
     if (command.description.len > 0) {
@@ -84,7 +61,7 @@ pub fn render(
     }
 
     const terminal_width = carnaval.terminalWidthForHandle(std.Io.File.stdout().handle);
-    try renderUsage(writer, command, profile);
+    try renderUsage(writer, command, profile, display_path);
 
     if (command.positionals.items.len > 0) {
         try writer.print("\n", .{});
@@ -106,8 +83,22 @@ pub fn render(
     try renderFlags(writer, command, profile, terminal_width, mode);
 }
 
+/// Space-separated path from the CLI root to `command` (e.g. `docent completion`).
+fn commandDisplayPath(allocator: std.mem.Allocator, command: *const Command) ![]u8 {
+    var chain = try command.collectAncestorPath(allocator);
+    defer chain.deinit(allocator);
+
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    for (chain.items, 0..) |cmd, j| {
+        if (j != 0) try out.append(allocator, ' ');
+        try out.appendSlice(allocator, cmd.name);
+    }
+    return out.toOwnedSlice(allocator);
+}
+
 /// Renders usage line for a command.
-fn renderUsage(writer: anytype, command: *const Command, profile: ColorProfile) !void {
+fn renderUsage(writer: *std.Io.Writer, command: *const Command, profile: ColorProfile, display_path: []const u8) !void {
     try writer.print("\n", .{});
     try carnaval.Style.init().bolded().renderWithProfile("Usage:", writer, profile);
 
@@ -129,7 +120,7 @@ fn renderUsage(writer: anytype, command: *const Command, profile: ColorProfile) 
         return;
     }
 
-    try writer.print(" {s}", .{command.name});
+    try writer.print(" {s}", .{display_path});
 
     if (command.hasAnyOptions()) {
         try writer.print(" [OPTIONS]", .{});
@@ -141,7 +132,7 @@ fn renderUsage(writer: anytype, command: *const Command, profile: ColorProfile) 
         const pos0 = command.positionals.items[0];
         if (pos0.variadic and !pos0.required) {
             try writer.print(" [PATHS]...", .{});
-            try writer.print("\n{s} <COMMAND>", .{command.name});
+            try writer.print("\n{s} <COMMAND>", .{display_path});
             try writer.print("\n", .{});
 
             return;
@@ -166,7 +157,7 @@ fn renderUsage(writer: anytype, command: *const Command, profile: ColorProfile) 
 }
 
 /// Renders positional arguments table-like list.
-fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize) !void {
+fn renderArguments(writer: *std.Io.Writer, command: *const Command, profile: ColorProfile, terminal_width: usize) !void {
     var spec_width: usize = 0;
     for (command.positionals.items) |arg| {
         var len = arg.name.len + 2;
@@ -242,7 +233,7 @@ fn renderArguments(writer: anytype, command: *const Command, profile: ColorProfi
 }
 
 /// Renders grouped and ungrouped subcommand rows.
-fn renderSubcommands(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize, mode: HelpMode) !void {
+fn renderSubcommands(writer: *std.Io.Writer, command: *const Command, profile: ColorProfile, terminal_width: usize, mode: HelpMode) !void {
     _ = mode;
     var cmd_width: usize = "help".len;
     for (command.subcommands.items) |sub| {
@@ -294,7 +285,7 @@ fn renderSubcommands(writer: anytype, command: *const Command, profile: ColorPro
 }
 
 /// Renders command options including inherited persistent flags.
-fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, terminal_width: usize, mode: HelpMode) !void {
+fn renderFlags(writer: *std.Io.Writer, command: *const Command, profile: ColorProfile, terminal_width: usize, mode: HelpMode) !void {
     var spec_width: usize = 0;
     for (command.flags.constSlice()) |flag| {
         const len = optionSpecLen(flag);
@@ -341,7 +332,7 @@ fn renderFlags(writer: anytype, command: *const Command, profile: ColorProfile, 
 
 /// Renders one option line with metadata annotations.
 fn renderOneFlag(
-    writer: anytype,
+    writer: *std.Io.Writer,
     flag: Command.Flag,
     is_global: bool,
     profile: ColorProfile,
@@ -556,7 +547,7 @@ fn optionSpecLen(flag: Command.Flag) usize {
 
 /// Writes an aligned option row with compact gutter spacing.
 fn printAlignedOptionRow(
-    writer: anytype,
+    writer: *std.Io.Writer,
     profile: ColorProfile,
     spec: []const u8,
     desc: []const u8,
@@ -580,7 +571,7 @@ fn printAlignedOptionRow(
 
 /// Writes an aligned command row with compact gutter spacing.
 fn printAlignedCommandRow(
-    writer: anytype,
+    writer: *std.Io.Writer,
     profile: ColorProfile,
     indent: []const u8,
     name: []const u8,
@@ -605,7 +596,7 @@ fn printAlignedCommandRow(
 
 /// Prints first description line inline and aligns continuation lines.
 fn printMultilineDescription(
-    writer: anytype,
+    writer: *std.Io.Writer,
     desc: []const u8,
     continuation_pad: usize,
     terminal_width: usize,
@@ -631,7 +622,7 @@ fn printMultilineDescription(
 }
 
 /// Writes `count` ASCII spaces.
-fn printSpaces(writer: anytype, count: usize) !void {
+fn printSpaces(writer: *std.Io.Writer, count: usize) !void {
     var i: usize = 0;
     while (i < count) : (i += 1) {
         try writer.print(" ", .{});
