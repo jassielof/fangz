@@ -138,8 +138,7 @@ pub const Flag = struct {
     }
 };
 
-// FIXME: Rename to PascalCase
-fn unwrapOptional(comptime T: type) type {
+fn UnwrapOptional(comptime T: type) type {
     return switch (@typeInfo(T)) {
         .optional => |info| info.child,
         else => T,
@@ -189,7 +188,7 @@ fn typeToFlagType(comptime T: type) FlagType {
 }
 
 pub fn FlagOptions(comptime T: type) type {
-    const Base = unwrapOptional(T);
+    const Base = UnwrapOptional(T);
 
     return struct {
         name: []const u8,
@@ -319,46 +318,9 @@ pub const MutuallyExclusive = struct {
     names: []const []const u8,
 };
 
-// TODO: Move to file-level struct
-pub const Hooks = struct {
-    /// Hook callback signature used during command execution lifecycle.
-    pub const HookFn = *const fn (*ParseContext) anyerror!void;
-    pre_run: ?HookFn = null,
-    run: ?HookFn = null,
-    post_run: ?HookFn = null,
-    persistent_pre_run: ?HookFn = null,
-    persistent_post_run: ?HookFn = null,
-};
+pub const Hooks = @import("command/Hooks.zig");
 
-// TODO: This struct is the init options, rename and move to file-level struct
-pub const Init = struct {
-    name: []const u8,
-    /// Human-friendly display name used by generated documentation.
-    display_name: []const u8 = "",
-    /// Short tagline rendered after the display name in generated documentation.
-    tagline: []const u8 = "",
-    /// One-line summary shown in `-h` and `--help` output.
-    description: []const u8 = "",
-    /// Extended description shown only in `--help` output.
-    long_description: []const u8 = "",
-    /// Root-level examples for generated docs / long help (see `CliExample`).
-    examples: ?[]const CliExample = null,
-    /// When set, `Usage` / synopsis lines use this text verbatim (may include `\\n`) instead of deriving from positionals and subcommands.
-    /// Borrowed — not freed by `Command` unless you replace it via `setUsageOverrideFormat` (heap-owned override).
-    usage_override: ?[]const u8 = null,
-    version: ?[]const u8 = null,
-    /// Author name used by generated documentation.
-    author_name: []const u8 = "",
-    /// Author email used by generated documentation.
-    author_email: []const u8 = "",
-    /// Git branch name used by generated documentation.
-    git_branch: []const u8 = "",
-    /// Git commit hash used by generated documentation.
-    git_commit: []const u8 = "",
-    /// Source date used by generated documentation.
-    source_date: []const u8 = "",
-    group_id: ?[]const u8 = null,
-};
+pub const InitOptions = @import("command/InitOptions.zig");
 
 allocator: Allocator,
 parent: ?*Command = null,
@@ -408,7 +370,7 @@ examples: ?[]const CliExample = null,
 frozen: bool = false,
 
 /// Creates a command node with empty child collections.
-pub fn init(allocator: Allocator, cfg: Init) !Command {
+pub fn init(allocator: Allocator, cfg: InitOptions) !Command {
     return .{
         .allocator = allocator,
         .name = cfg.name,
@@ -483,7 +445,7 @@ pub fn addGroup(self: *Command, group: Group) !void {
 pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
     if (self.frozen) return error.FrozenCommand;
 
-    const Base = unwrapOptional(T);
+    const Base = UnwrapOptional(T);
     const value_type = comptime typeToFlagType(Base);
 
     if (isOptional(T) and opts.default != null) return error.InvalidFlagConfiguration;
@@ -582,7 +544,7 @@ pub fn addMutuallyExclusive(self: *Command, group: MutuallyExclusive) !void {
 }
 
 /// Creates and attaches a new subcommand node.
-pub fn addSubcommand(self: *Command, cfg: Init) !*Command {
+pub fn addSubcommand(self: *Command, cfg: InitOptions) !*Command {
     if (self.frozen) return error.FrozenCommand;
     var ptr = try self.allocator.create(Command);
     ptr.* = try Command.init(self.allocator, cfg);
