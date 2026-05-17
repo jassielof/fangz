@@ -18,3 +18,13 @@ pub const Error = std.mem.Allocator.Error || Parser.ParseError || error{
     /// Returned when a mutation (addFlag, addSubcommand, …) is attempted after freeze().
     FrozenCommand,
 };
+
+/// When `err` is a [`Parser.ParseError`], returns it so callers can attach diagnostics.
+pub fn asParseError(err: Error) ?Parser.ParseError {
+    inline for (@typeInfo(Parser.ParseError).error_set.errors) |field_name| {
+        const pe = @field(Parser.ParseError, field_name);
+        if (err == pe) return pe;
+    }
+
+    return null;
+}

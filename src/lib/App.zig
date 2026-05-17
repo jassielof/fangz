@@ -152,28 +152,7 @@ pub fn executeFrom(self: *App, argv: []const []const u8) anyerror!void {
     }
 
     const ctx = self.parseFrom(argv) catch |err| {
-        // TODO: Review if this is really necessary and it's not just boilerplate, I feel it could maybe be shortened or even omitted? it looks really unnecessary.
-        const parse_err: ?Parser.ParseError = switch (err) {
-            error.UnknownFlag => error.UnknownFlag,
-            error.UnknownCommand => error.UnknownCommand,
-            error.MissingFlagValue => error.MissingFlagValue,
-            error.MissingRequiredFlag => error.MissingRequiredFlag,
-            error.MissingRequiredPositional => error.MissingRequiredPositional,
-            error.TooManyPositionals => error.TooManyPositionals,
-            error.InvalidInt => error.InvalidInt,
-            error.InvalidFloat => error.InvalidFloat,
-            error.InvalidEnumValue => error.InvalidEnumValue,
-            error.KeyValueMissingEquals => error.KeyValueMissingEquals,
-            error.KeyValueEmptyKey => error.KeyValueEmptyKey,
-            error.KeyValueEmptyValue => error.KeyValueEmptyValue,
-            error.InvalidAllowedKey => error.InvalidAllowedKey,
-            error.InvalidAllowedValue => error.InvalidAllowedValue,
-            error.UnexpectedValueForBool => error.UnexpectedValueForBool,
-            error.MutuallyExclusiveFlags => error.MutuallyExclusiveFlags,
-            else => null,
-        };
-
-        if (parse_err) |pe| {
+        if (errors.asParseError(err)) |pe| {
             var diag = try Parser.diagnoseError(self.allocator, self.root(), argv, pe);
             defer diag.deinit();
             try self.printError(diag.message, diag.hint);
