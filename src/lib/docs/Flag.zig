@@ -7,10 +7,10 @@ name: []const u8,
 short: []const u8,
 long_display: []const u8,
 full_signature: []const u8,
-/// One-line summary (typically `Flag.description`).
+/// Short help (`Flag.brief`).
+brief: []const u8,
+/// Long prose (`Flag.description`).
 description: []const u8,
-/// Extra prose (`Flag.long_description`).
-extended: []const u8,
 type_name: []const u8,
 required: bool,
 required_text: []const u8,

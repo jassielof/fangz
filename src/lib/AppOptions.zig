@@ -4,7 +4,9 @@
 display_name: ?[]const u8 = null,
 /// Short subtitle rendered after the display name in generated documentation.
 tagline: []const u8 = "",
-/// Description shown in help and generated documentation. Defaults to the injected manifest description when empty.
+/// Short help for the root command. Defaults to the injected manifest summary when empty (see `injectMetadata`).
+brief: []const u8 = "",
+/// Long help prose for the root command (`--help` only).
 description: []const u8 = "",
 /// Semver string. Defaults to the version from the consumer's `build.zig.zon` injected by `injectMeta`. Pass an explicit value to override, or pass `""` to suppress the `--version` flag entirely.
 version: ?[]const u8 = null,

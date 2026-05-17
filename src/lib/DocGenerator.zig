@@ -129,8 +129,8 @@ fn buildDocumentModel(
         .display_name = display_name,
         .title = title,
         .tagline = root.tagline,
-        .subtitle = root.description,
-        .description = root.description,
+        .subtitle = root.brief,
+        .description = if (root.description.len > 0) root.description else root.brief,
         .version = root.version orelse "",
         .author_name = root.author_name,
         .author_email = root.author_email,
@@ -196,8 +196,8 @@ fn appendHelpCommandDoc(
         .path_parts = path_parts,
         .anchor = anchor,
         .depth = 1,
-        .description = "Print this message or the help of the given subcommand(s)",
-        .long_description = "",
+        .brief = "Print this message or the help of the given subcommand(s)",
+        .description = "",
         .usage = usage,
         .parent_display_path = parent_display_path,
         .parent_anchor = parent_anchor,
@@ -219,24 +219,24 @@ pub fn registerDocsCommand(root: *Command) !void {
 
     const docs = try root.addSubcommand(.{
         .name = "docs",
-        .description = "Generate AsciiDoc documentation for this CLI",
+        .brief = "Generate AsciiDoc documentation for this CLI",
     });
 
     try docs.addFlag([]const u8, .{
         .name = "output-dir",
-        .description = "Directory where AsciiDoc documentation is written.",
+        .brief = "Directory where AsciiDoc documentation is written.",
         .default = "docs",
     });
 
     try docs.addFlag([]const u8, .{
         .name = "file",
-        .description = "Output AsciiDoc file name.",
+        .brief = "Output AsciiDoc file name.",
         .default = "cli.adoc",
     });
 
     try docs.addFlag([]const u8, .{
         .name = "template",
-        .description = "Optional path to a custom Trama template file (AsciiDoc).",
+        .brief = "Optional path to a custom Trama template file (AsciiDoc).",
     });
 
     docs.setHooks(.{ .run = runDocsCommand });
@@ -311,8 +311,8 @@ fn commandDocFromCommand(allocator: std.mem.Allocator, cmd: *const Command) !Com
         .path_parts = path_parts,
         .anchor = anchor,
         .depth = if (chain.items.len > 0) chain.items.len - 1 else 0,
+        .brief = cmd.brief,
         .description = cmd.description,
-        .long_description = cmd.long_description,
         .usage = usage,
         .parent_display_path = parent_display_path,
         .parent_anchor = parent_anchor,
@@ -382,6 +382,7 @@ fn buildPositionals(allocator: std.mem.Allocator, cmd: *const Command) ![]Positi
         items[i] = .{
             .name = pos.name,
             .display = display,
+            .brief = pos.brief,
             .description = pos.description,
             .required = pos.required,
             .required_text = if (pos.required) "yes" else "no",
@@ -450,8 +451,8 @@ fn flagDocFromFlag(allocator: std.mem.Allocator, flag: Command.Flag, scope: []co
         .short = short,
         .long_display = long_display,
         .full_signature = full_signature,
+        .brief = flag.brief,
         .description = flag.description,
-        .extended = flag.long_description,
         .type_name = typeToken(flag.value_type),
         .required = flag.required,
         .required_text = if (flag.required) "yes" else "no",
@@ -474,14 +475,14 @@ fn flagDocFromFlag(allocator: std.mem.Allocator, flag: Command.Flag, scope: []co
     };
 }
 
-fn builtinFlagDoc(allocator: std.mem.Allocator, signature: []const u8, name: []const u8, description: []const u8) !FlagDoc {
+fn builtinFlagDoc(allocator: std.mem.Allocator, signature: []const u8, name: []const u8, brief: []const u8) !FlagDoc {
     return .{
         .name = name,
         .short = try allocator.dupe(u8, ""),
         .long_display = try allocator.dupe(u8, ""),
         .full_signature = try allocator.dupe(u8, signature),
-        .description = description,
-        .extended = "",
+        .brief = brief,
+        .description = "",
         .type_name = "bool",
         .required = false,
         .required_text = "no",
@@ -533,7 +534,7 @@ fn buildSubcommands(allocator: std.mem.Allocator, cmd: *const Command) ![]Subcom
             .name = "help",
             .display_path = display_path,
             .anchor = try anchorForDisplayPath(allocator, display_path),
-            .description = "Print this message or the help of the given subcommand(s)",
+            .brief = "Print this message or the help of the given subcommand(s)",
         };
     }
     return items;
@@ -546,7 +547,7 @@ fn subcommandDocFromCommand(allocator: std.mem.Allocator, cmd: *const Command) !
         .name = cmd.name,
         .display_path = display_path,
         .anchor = try anchorForDisplayPath(allocator, display_path),
-        .description = cmd.description,
+        .brief = cmd.brief,
     };
 }
 

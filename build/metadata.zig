@@ -94,6 +94,7 @@ fn compileVersion(b: *std.Build, compile: *std.Build.Step.Compile) ?[]const u8 {
 ///
 /// - `name`: `compile.name` (the executable name from `b.addExecutable`, used as the CLI command name)
 /// - `version`: `compile.version` from `b.addExecutable` when present, otherwise the consumer's `build.zig.zon` version
+/// - `brief`: one-line summary from the consumer's `build.zig.zon` `description` field (short CLI help default)
 /// - `author_name`: git author name for `HEAD`
 /// - `author_email`: git author email for `HEAD`
 /// - `commit`: short git commit hash (`git rev-parse --short HEAD`)
@@ -110,7 +111,7 @@ pub fn injectMetadata(
 
     options.addOption([]const u8, "name", compile.name);
     options.addOption([]const u8, "version", compileVersion(b, compile) orelse manifestVersion(b) orelse "");
-    options.addOption([]const u8, "description", manifestDescription(b) orelse "");
+    options.addOption([]const u8, "brief", manifestDescription(b) orelse "");
     options.addOption([]const u8, "author_name", git.commitAuthor(b) orelse "");
     options.addOption([]const u8, "author_email", git.commitEmail(b) orelse "");
     options.addOption([]const u8, "commit", git.extractCommit(b));

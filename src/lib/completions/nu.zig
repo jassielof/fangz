@@ -178,7 +178,7 @@ fn renderFlag(writer: *std.Io.Writer, path: []const u8, flag: Command.Flag) !voi
         } else {
             try writer.print("    --{s}(-{c})", .{ flag.name, short });
         }
-        try renderHelpComment(writer, flag.description);
+        try renderBriefDescComment(writer, flag.brief, flag.description);
         return;
     }
 
@@ -187,7 +187,7 @@ fn renderFlag(writer: *std.Io.Writer, path: []const u8, flag: Command.Flag) !voi
     } else {
         try writer.print("    --{s}", .{flag.name});
     }
-    try renderHelpComment(writer, flag.description);
+    try renderBriefDescComment(writer, flag.brief, flag.description);
 }
 
 fn renderPositionals(writer: *std.Io.Writer, root: *const Command, path: []const u8) !void {
@@ -207,8 +207,19 @@ fn renderPositionals(writer: *std.Io.Writer, root: *const Command, path: []const
         } else {
             try writer.print("    {s}?: string{s}", .{ nu_name, at_completer });
         }
-        try renderHelpComment(writer, pos.description);
+        try renderBriefDescComment(writer, pos.brief, pos.description);
     }
+}
+
+fn renderBriefDescComment(writer: *std.Io.Writer, brief: []const u8, description: []const u8) !void {
+    const text: []const u8 = if (description.len == 0)
+        brief
+    else if (brief.len == 0)
+        description
+    else
+        try std.fmt.allocPrint(std.heap.page_allocator, "{s} {s}", .{ brief, description });
+    defer if (description.len > 0 and brief.len > 0) std.heap.page_allocator.free(text);
+    try renderHelpComment(writer, text);
 }
 
 fn renderHelpComment(writer: *std.Io.Writer, description: []const u8) !void {

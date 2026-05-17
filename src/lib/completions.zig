@@ -97,14 +97,14 @@ pub fn registerCompletionCommand(root: *Command) !void {
 
     const completion = try root.addSubcommand(.{
         .name = "completion",
-        .description = "Generate shell completion scripts",
+        .brief = "Generate shell completion scripts",
     });
 
     try completion.addAlias("completions");
 
     try completion.addPositional(.{
         .name = "shell",
-        .description = "Target shell.",
+        .brief = "Target shell.",
         .required = true,
         .allowed_values = Shell.allowedValues(),
         .allowed_value_labels = shellAllowedValueLabels(),

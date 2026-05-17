@@ -10,7 +10,7 @@ const Command = @import("Command.zig");
 /// Controls the verbosity of the rendered help output.
 ///
 /// - `.short` — compact output triggered by `-h`: synopsis, argument list, flag list with one-liner summaries only.
-/// - `.full`  — complete output triggered by `--help` or `help <cmd>`: same as short plus per-flag `long_description` and per-command `long_description`.
+/// - `.full`  — complete output triggered by `--help` or `help <cmd>`: same as short plus per-flag `description` and per-command `description` (long prose).
 pub const HelpMode = enum { short, full };
 
 /// Renders command help sections to the provided writer.
@@ -26,8 +26,8 @@ pub fn render(
     try carnaval.Style.init().bolded().renderWithProfile(display_path, writer, profile);
     try writer.print("\n", .{});
 
-    if (command.description.len > 0) {
-        try writer.print("{s}\n", .{command.description});
+    if (command.brief.len > 0) {
+        try writer.print("{s}\n", .{command.brief});
     }
 
     if (mode == .full) {
@@ -47,8 +47,8 @@ pub fn render(
         }
     }
 
-    if (mode == .full and command.long_description.len > 0) {
-        try writer.print("\n{s}\n", .{command.long_description});
+    if (mode == .full and command.description.len > 0) {
+        try writer.print("\n{s}\n", .{command.description});
     }
 
     if (command.aliases.items.len > 0) {
@@ -67,7 +67,7 @@ pub fn render(
         try writer.print("\n", .{});
         try carnaval.Style.init().bolded().renderWithProfile("Arguments:", writer, profile);
         try writer.print("\n", .{});
-        try renderArguments(writer, command, profile, terminal_width);
+        try renderArguments(writer, command, profile, terminal_width, mode);
     }
 
     if (command.subcommands.items.len > 0) {
@@ -157,7 +157,7 @@ fn renderUsage(writer: *std.Io.Writer, command: *const Command, profile: ColorPr
 }
 
 /// Renders positional arguments table-like list.
-fn renderArguments(writer: *std.Io.Writer, command: *const Command, profile: ColorProfile, terminal_width: usize) !void {
+fn renderArguments(writer: *std.Io.Writer, command: *const Command, profile: ColorProfile, terminal_width: usize, mode: HelpMode) !void {
     var spec_width: usize = 0;
     for (command.positionals.items) |arg| {
         var len = arg.name.len + 2;
@@ -173,7 +173,7 @@ fn renderArguments(writer: *std.Io.Writer, command: *const Command, profile: Col
 
         var desc_buf: [512]u8 = undefined;
         var dw: std.Io.Writer = .fixed(&desc_buf);
-        if (arg.description.len > 0) try dw.print("{s}", .{arg.description});
+        if (arg.brief.len > 0) try dw.print("{s}", .{arg.brief});
         // [required] is communicated by <name> in the Usage line; do not repeat it here.
         if (arg.variadic) try dw.print(" [variadic]", .{});
         if (arg.allowed_values) |vals| {
@@ -207,6 +207,12 @@ fn renderArguments(writer: *std.Io.Writer, command: *const Command, profile: Col
             terminal_width,
             command.allocator,
         );
+
+        if (mode == .full and arg.description.len > 0) {
+            const indent = 2 + spec_width + 2;
+            try printSpaces(writer, indent);
+            try writer.print("{s}\n", .{arg.description});
+        }
 
         if (arg.allowed_values) |vals| {
             if (arg.allowed_values_style == .bullet_list) {
@@ -260,7 +266,7 @@ fn renderSubcommands(writer: *std.Io.Writer, command: *const Command, profile: C
         for (command.subcommands.items) |sub| {
             if (sub.group_id) |gid| {
                 if (std.mem.eql(u8, gid, group.id)) {
-                    try printAlignedCommandRow(writer, profile, "    ", sub.name, sub.description, cmd_width, terminal_width, command.allocator);
+                    try printAlignedCommandRow(writer, profile, "    ", sub.name, sub.brief, cmd_width, terminal_width, command.allocator);
                 }
             }
         }
@@ -269,7 +275,7 @@ fn renderSubcommands(writer: *std.Io.Writer, command: *const Command, profile: C
     const default_indent = if (rendered_group_section) "    " else "  ";
     for (command.subcommands.items) |sub| {
         if (sub.group_id != null) continue;
-        try printAlignedCommandRow(writer, profile, default_indent, sub.name, sub.description, cmd_width, terminal_width, command.allocator);
+        try printAlignedCommandRow(writer, profile, default_indent, sub.name, sub.brief, cmd_width, terminal_width, command.allocator);
     }
 
     try printAlignedCommandRow(
@@ -399,7 +405,7 @@ fn renderOneFlag(
 
     var desc_buf: [512]u8 = undefined;
     var d: std.Io.Writer = .fixed(&desc_buf);
-    try d.print("{s}", .{flag.description});
+    try d.print("{s}", .{flag.brief});
     if (flag.required) try d.print(" [required]", .{});
 
     if (flag.default_value) |dv| {
@@ -462,11 +468,11 @@ fn renderOneFlag(
         }
     }
 
-    // In full-help mode, render the extended description indented below the row.
-    if (mode == .full and flag.long_description.len > 0) {
+    // In full-help mode, render long prose indented below the row.
+    if (mode == .full and flag.description.len > 0) {
         const indent = 4 + spec_width + 2;
         try printSpaces(writer, indent);
-        try writer.print("{s}\n", .{flag.long_description});
+        try writer.print("{s}\n", .{flag.description});
     }
 
     if (mode == .full) {

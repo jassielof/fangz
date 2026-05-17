@@ -9,7 +9,7 @@ comptime {
 
 fn makeApp() !fangz.App {
     return fangz.App.init(testing.allocator, testing.io, .{
-        .description = "test app",
+        .brief = "test app",
         .version = "1.2.3",
     });
 }
@@ -18,8 +18,8 @@ test "dispatches nested subcommands with aliases" {
     var app = try makeApp();
     defer app.deinit();
 
-    const remote = try app.root().addSubcommand(.{ .name = "remote", .description = "remote ops" });
-    const add = try remote.addSubcommand(.{ .name = "add", .description = "add remote" });
+    const remote = try app.root().addSubcommand(.{ .name = "remote", .brief = "remote ops" });
+    const add = try remote.addSubcommand(.{ .name = "add", .brief = "add remote" });
     try add.addAlias("a");
 
     const ctx = try app.parseFrom(&.{ "remote", "a" });
@@ -30,7 +30,7 @@ test "help on empty args applies to selected subcommand" {
     var app = try makeApp();
     defer app.deinit();
 
-    const info = try app.root().addSubcommand(.{ .name = "info", .description = "show info" });
+    const info = try app.root().addSubcommand(.{ .name = "info", .brief = "show info" });
     info.setHelpOnEmptyArgs(true);
 
     const ctx = try app.parseFrom(&.{"info"});
@@ -42,7 +42,7 @@ test "help subcommand requests root help" {
     var app = try makeApp();
     defer app.deinit();
 
-    _ = try app.root().addSubcommand(.{ .name = "status", .description = "show status" });
+    _ = try app.root().addSubcommand(.{ .name = "status", .brief = "show status" });
 
     const ctx = try app.parseFrom(&.{"help"});
     try testing.expect(ctx.help_requested);
@@ -53,12 +53,25 @@ test "help subcommand requests nested command help" {
     var app = try makeApp();
     defer app.deinit();
 
-    const remote = try app.root().addSubcommand(.{ .name = "remote", .description = "remote ops" });
-    _ = try remote.addSubcommand(.{ .name = "add", .description = "add remote" });
+    const remote = try app.root().addSubcommand(.{ .name = "remote", .brief = "remote ops" });
+    _ = try remote.addSubcommand(.{ .name = "add", .brief = "add remote" });
 
     const ctx = try app.parseFrom(&.{ "help", "remote", "add" });
     try testing.expect(ctx.help_requested);
     try testing.expectEqualStrings("add", ctx.command.name);
+}
+
+test "duplicate short flag errors with DuplicateShortFlag" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    const root = app.root();
+    try root.addFlag(bool, .{ .name = "verbose", .short = 'v' });
+    try testing.expectError(error.DuplicateShortFlag, root.addFlag(bool, .{ .name = "version", .short = 'v' }));
+
+    const prior = root.resolveLocalFlagByShort('v').?;
+    try testing.expectEqual(@as(usize, 0), prior.index);
+    try testing.expectEqualStrings("verbose", prior.command.flags.constSlice()[prior.index].name);
 }
 
 test "short flag bundling parses char by char" {
@@ -106,7 +119,7 @@ test "enum flag convenience parses default and explicit values" {
     try app.root().addFlag(Output, .{
         .name = "output",
         .short = 'o',
-        .description = "Output format",
+        .brief = "Output format",
         .default = .json,
     });
 
@@ -180,7 +193,7 @@ test "version flag is only available on root command" {
     var app = try makeApp();
     defer app.deinit();
 
-    _ = try app.root().addSubcommand(.{ .name = "status", .description = "show status" });
+    _ = try app.root().addSubcommand(.{ .name = "status", .brief = "show status" });
 
     const root_long = try app.parseFrom(&.{"--version"});
     try testing.expect(root_long.version_requested);
@@ -217,7 +230,7 @@ test "global persistent flag propagates to subcommands" {
         .short = 'v',
         .persistent = true,
     });
-    _ = try app.root().addSubcommand(.{ .name = "status", .description = "status" });
+    _ = try app.root().addSubcommand(.{ .name = "status", .brief = "status" });
 
     const ctx = try app.parseFrom(&.{ "status", "-v" });
     try testing.expectEqualStrings("status", ctx.command.name);
@@ -250,7 +263,7 @@ test "unknown command returns error" {
     var app = try makeApp();
     defer app.deinit();
 
-    _ = try app.root().addSubcommand(.{ .name = "commit", .description = "commit changes" });
+    _ = try app.root().addSubcommand(.{ .name = "commit", .brief = "commit changes" });
     try testing.expectError(error.UnknownCommand, app.parseFrom(&.{"comit"}));
 }
 
@@ -282,17 +295,17 @@ test "doc generator writes single asciidoc file by default" {
         .name = "verbose",
         .short = 'v',
         .persistent = true,
-        .description = "Verbose output",
+        .brief = "Verbose output",
     });
     const commit = try root.addSubcommand(.{
         .name = "commit",
-        .description = "Record changes",
+        .brief = "Record changes",
     });
     try commit.addFlag([]const u8, .{
         .name = "message",
         .short = 'm',
         .required = true,
-        .description = "Commit message",
+        .brief = "Commit message",
     });
 
     const out_dir = "zig-out/docgen-single";
@@ -321,11 +334,11 @@ test "doc generator renders nested commands as flat reference entries" {
     const root = app.root();
     const remote = try root.addSubcommand(.{
         .name = "remote",
-        .description = "Manage remotes",
+        .brief = "Manage remotes",
     });
     _ = try remote.addSubcommand(.{
         .name = "add",
-        .description = "Add a remote",
+        .brief = "Add a remote",
     });
 
     const out_dir = "zig-out/docgen-tree";
@@ -347,7 +360,7 @@ test "app docs include configured author and revision metadata" {
     var app = try fangz.App.init(testing.allocator, testing.io, .{
         .display_name = "Git",
         .tagline = "Distributed Version Control",
-        .description = "test app",
+        .brief = "test app",
         .version = "1.2.3",
         .author_name = "Ada Lovelace",
         .author_email = "ada@example.com",

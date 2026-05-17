@@ -3,6 +3,9 @@ const std = @import("std");
 const Positional = @This();
 name: []const u8,
 display: []const u8,
+/// Short help (`Positional.brief`).
+brief: []const u8,
+/// Long prose (`Positional.description`).
 description: []const u8,
 required: bool,
 required_text: []const u8,

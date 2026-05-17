@@ -7,6 +7,8 @@ const Parser = @import("Parser.zig");
 /// Aggregate error set surfaced by public Fangz APIs.
 pub const Error = std.mem.Allocator.Error || Parser.ParseError || error{
     DuplicateFlag,
+    /// Same command already registers this short option letter on another flag.
+    DuplicateShortFlag,
     DuplicateAlias,
     MultipleVariadicPositionals,
     VariadicMustBeLast,

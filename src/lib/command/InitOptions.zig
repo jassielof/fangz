@@ -3,10 +3,10 @@ name: []const u8,
 display_name: []const u8 = "",
 /// Short tagline rendered after the display name in generated documentation.
 tagline: []const u8 = "",
-/// One-line summary shown in `-h` and `--help` output.
+/// Short help shown in `-h` and `--help` list rows.
+brief: []const u8 = "",
+/// Long help prose shown after the command summary only with `--help` / `help`.
 description: []const u8 = "",
-/// Extended description shown only in `--help` output.
-long_description: []const u8 = "",
 /// Root-level examples for generated docs / long help (see `CliExample`).
 examples: ?[]const CliExample = null,
 /// When set, `Usage` / synopsis lines use this text verbatim (may include `\\n`) instead of deriving from positionals and subcommands.

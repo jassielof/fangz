@@ -63,7 +63,7 @@ pub const KeyValueKeyMeta = struct {
     name: []const u8,
     default_value: []const u8,
     summary: []const u8,
-    long_description: []const u8 = "",
+    description: []const u8 = "",
     group: ?[]const u8 = null,
 };
 
@@ -103,11 +103,10 @@ pub const AllowedValuesStyle = enum {
 pub const Flag = struct {
     name: []const u8,
     short: ?u8 = null,
-    /// One-line summary shown in both `-h` and `--help` output.
+    /// Short help shown in `-h` and `--help` flag rows.
+    brief: []const u8 = "",
+    /// Long help prose indented below the flag row only with `--help` / `help`.
     description: []const u8 = "",
-    // TODO: Long description feels ugly, description itself for the short help is fine, but for something longer than a description, there might be a better word to describe it. A single word. A better pair I was thinking is "Brief" for short help and "Description" for long help.
-    /// Extended description shown only in `--help` output.
-    long_description: []const u8 = "",
     value_type: FlagType = .bool,
     required: bool = false,
     persistent: bool = false,
@@ -193,10 +192,10 @@ pub fn FlagOptions(comptime T: type) type {
     return struct {
         name: []const u8,
         short: ?u8 = null,
-        /// One-line summary shown in `-h` and `--help` output.
+        /// Short help shown in `-h` and `--help` flag rows.
+        brief: []const u8 = "",
+        /// Long help prose indented below the flag row only with `--help` / `help`.
         description: []const u8 = "",
-        /// Extended description shown only in `--help` output.
-        long_description: []const u8 = "",
         required: bool = false,
         persistent: bool = false,
         /// Accept `--no-<name>` form to set the flag false.  Only valid for bool flags.
@@ -295,6 +294,9 @@ pub const NuCompleter = struct {
 
 pub const Positional = struct {
     name: []const u8,
+    /// Short help shown in `-h` and `--help` argument rows.
+    brief: []const u8 = "",
+    /// Long help prose indented below the argument row only with `--help` / `help`.
     description: []const u8 = "",
     required: bool = false,
     variadic: bool = false,
@@ -329,10 +331,10 @@ name: []const u8,
 display_name: []const u8,
 /// Short tagline rendered after the display name in generated documentation.
 tagline: []const u8,
-/// One-line summary shown in `-h` and `--help` output.
+/// Short help shown after the command title in `-h` and `--help`.
+brief: []const u8,
+/// Long help prose after examples only with `--help` / `help`.
 description: []const u8,
-/// Extended description shown only in `--help` output.
-long_description: []const u8,
 version: ?[]const u8,
 /// Author name used by generated documentation.
 author_name: []const u8,
@@ -376,8 +378,8 @@ pub fn init(allocator: Allocator, cfg: InitOptions) !Command {
         .name = cfg.name,
         .display_name = cfg.display_name,
         .tagline = cfg.tagline,
+        .brief = cfg.brief,
         .description = cfg.description,
-        .long_description = cfg.long_description,
         .examples = cfg.examples,
         .usage_override = cfg.usage_override,
         .usage_override_owned = false,
@@ -459,8 +461,8 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
     var flag: Flag = .{
         .name = opts.name,
         .short = opts.short,
+        .brief = opts.brief,
         .description = opts.description,
-        .long_description = opts.long_description,
         .value_type = value_type,
         .required = opts.required,
         .persistent = opts.persistent,
@@ -495,9 +497,8 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
     }
 
     if (self.flag_by_name.contains(flag.name)) return error.DuplicateFlag;
-    // FIXME: It should throw an error describing it's a short flag duplication, not just a generic flag duplication error, and if possible, show the the conflict.
     if (flag.short) |short| {
-        if (self.flag_by_short.contains(short)) return error.DuplicateFlag;
+        if (self.flag_by_short.contains(short)) return error.DuplicateShortFlag;
     }
 
     const idx = self.flags.len;
@@ -512,7 +513,7 @@ pub fn addFlagDescriptor(self: *Command, flag: Flag) !void {
     if (self.flag_by_name.contains(flag.name)) return error.DuplicateFlag;
 
     if (flag.short) |short| {
-        if (self.flag_by_short.contains(short)) return error.DuplicateFlag;
+        if (self.flag_by_short.contains(short)) return error.DuplicateShortFlag;
     }
 
     const idx = self.flags.len;
@@ -631,6 +632,14 @@ pub fn resolveFlagByShort(self: *const Command, short: u8) ?FlagLookup {
             if (cmd == self or flag.persistent) return .{ .command = cmd, .index = idx };
         }
         current = cmd.parent;
+    }
+    return null;
+}
+
+/// Resolves a short flag registered on this command only (ignores parent inheritance).
+pub fn resolveLocalFlagByShort(self: *const Command, short: u8) ?FlagLookup {
+    if (self.flag_by_short.get(short)) |idx| {
+        return .{ .command = self, .index = idx };
     }
     return null;
 }
