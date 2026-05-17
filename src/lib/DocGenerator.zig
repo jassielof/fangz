@@ -139,7 +139,7 @@ fn buildDocumentModel(
         .git_ref = git_ref,
         .source_date = root.source_date,
         .app_name_attribute = root.name,
-        .toc = options.toc_position.asAsciiDocAttribute(),
+        .toc = options.toc_position.toString(),
         .app_examples = root.examples orelse &.{},
         .help_command_anchor = help_command_anchor,
         .root = if (commands_flat.len > 0) commands_flat[0] else CommandDoc.empty(),
