@@ -212,11 +212,36 @@ fn renderPositionals(writer: *std.Io.Writer, root: *const Command, path: []const
 }
 
 fn renderHelpComment(writer: *std.Io.Writer, description: []const u8) !void {
-    if (description.len > 0) {
-        try writer.print(" # {s}\n", .{description});
-    } else {
+    const merged = try mergeHelpCommentWords(std.heap.page_allocator, description);
+    defer std.heap.page_allocator.free(merged);
+
+    if (merged.len == 0) {
         try writer.print("\n", .{});
+        return;
     }
+    try writer.print(" # {s}\n", .{merged});
+}
+
+fn mergeHelpCommentWords(allocator: std.mem.Allocator, description: []const u8) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+
+    var i: usize = 0;
+    while (i < description.len) {
+        while (i < description.len and helpCommentWhitespace(description[i])) i += 1;
+        if (i >= description.len) break;
+
+        if (out.items.len > 0) try out.append(allocator, ' ');
+        while (i < description.len and !helpCommentWhitespace(description[i])) : (i += 1) {
+            try out.append(allocator, description[i]);
+        }
+    }
+
+    return out.toOwnedSlice(allocator);
+}
+
+fn helpCommentWhitespace(c: u8) bool {
+    return c == ' ' or c == '\t' or c == '\n' or c == '\r';
 }
 
 fn positionalCompleterAnnotation(path: []const u8, pos: Command.Positional) ![]const u8 {
