@@ -4,7 +4,6 @@
 
 const std = @import("std");
 
-const meta = @import("fangz_meta");
 const trama = @import("trama");
 
 const Command = @import("Command.zig");
@@ -12,6 +11,7 @@ pub const CommandDoc = @import("docs/Command.zig");
 pub const FlagDoc = @import("docs/Flag.zig");
 pub const DocumentModel = @import("docs/Model.zig");
 pub const Options = @import("docs/Options.zig");
+pub const TocPosition = Options.TocPosition;
 pub const PositionalDoc = @import("docs/Positional.zig");
 pub const SubcommandDoc = @import("docs/Subcommand.zig");
 const ParseContext = @import("ParseContext.zig");
@@ -41,6 +41,7 @@ pub fn generateDocs(
 
     const doc = try renderSingleFile(
         allocator,
+        io,
         root,
         options,
     );
@@ -53,15 +54,31 @@ pub fn generateDocs(
 
 fn renderSingleFile(
     allocator: std.mem.Allocator,
+    io: std.Io,
     root: *const Command,
     options: Options,
 ) ![]u8 {
     var model = try buildDocumentModel(allocator, root, options);
     defer model.deinit(allocator);
 
+    var template_owned: ?[]const u8 = null;
+    defer if (template_owned) |buf| allocator.free(buf);
+
+    const template_src: []const u8 = if (options.template_path) |p| blk: {
+        const file = if (std.fs.path.isAbsolute(p))
+            try std.Io.Dir.openFileAbsolute(io, p, .{})
+        else
+            try std.Io.Dir.cwd().openFile(io, p, .{});
+        defer file.close(io);
+        var reader = file.reader(io, &.{});
+        const buf = try reader.interface.allocRemaining(allocator, .limited(16 * 1024 * 1024));
+        template_owned = buf;
+        break :blk buf;
+    } else @embedFile("templates/default.adoc");
+
     return trama.renderAlloc(
         allocator,
-        @embedFile("templates/default.adoc"),
+        template_src,
         &model,
         .{ .escape_mode = .asciidoc },
     );
@@ -97,12 +114,6 @@ fn buildDocumentModel(
     const git_ref = try gitRef(allocator, root.git_branch, root.git_commit);
     errdefer allocator.free(git_ref);
 
-    const command_index = if (options.include_command_index)
-        try buildCommandIndex(allocator, root, commands_flat)
-    else
-        try allocator.dupe(u8, "");
-    errdefer allocator.free(command_index);
-
     const help_display_path = try std.fmt.allocPrint(allocator, "{s} help", .{root.name});
     defer allocator.free(help_display_path);
     const help_command_anchor = try anchorForDisplayPath(allocator, help_display_path);
@@ -128,9 +139,7 @@ fn buildDocumentModel(
         .git_ref = git_ref,
         .source_date = root.source_date,
         .app_name_attribute = root.name,
-        .include_command_index = options.include_command_index,
-        .command_index = command_index,
-        .toc = options.toc_position,
+        .toc = options.toc_position.asAsciiDocAttribute(),
         .app_examples = root.examples orelse &.{},
         .help_command_anchor = help_command_anchor,
         .root = if (commands_flat.len > 0) commands_flat[0] else CommandDoc.empty(),
@@ -227,7 +236,7 @@ pub fn registerDocsCommand(root: *Command) !void {
 
     try docs.addFlag([]const u8, .{
         .name = "template",
-        .description = "Optional custom Trama template path.",
+        .description = "Optional path to a custom Trama template file (AsciiDoc).",
     });
 
     docs.setHooks(.{ .run = runDocsCommand });
@@ -539,44 +548,6 @@ fn subcommandDocFromCommand(allocator: std.mem.Allocator, cmd: *const Command) !
         .anchor = try anchorForDisplayPath(allocator, display_path),
         .description = cmd.description,
     };
-}
-
-fn buildCommandIndex(allocator: std.mem.Allocator, root: *const Command, commands_flat: []const CommandDoc) ![]const u8 {
-    _ = commands_flat;
-    var out = try std.ArrayList(u8).initCapacity(allocator, 512);
-    errdefer out.deinit(allocator);
-    try appendCommandIndexLine(allocator, &out, root, 0);
-    for (root.subcommands.items) |sub| {
-        try appendCommandIndexTree(allocator, &out, sub, 1);
-    }
-    const help_display_path = try std.fmt.allocPrint(allocator, "{s} help", .{root.name});
-    defer allocator.free(help_display_path);
-    const help_anchor = try anchorForDisplayPath(allocator, help_display_path);
-    defer allocator.free(help_anchor);
-    try out.print(allocator, "  ** xref:{s}[`{s}`] - Print this message or the help of the given subcommand(s)\n", .{ help_anchor, help_display_path });
-    return out.toOwnedSlice(allocator);
-}
-
-fn appendCommandIndexTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), cmd: *const Command, depth: usize) !void {
-    try appendCommandIndexLine(allocator, out, cmd, depth);
-    for (cmd.subcommands.items) |sub| {
-        try appendCommandIndexTree(allocator, out, sub, depth + 1);
-    }
-}
-
-fn appendCommandIndexLine(allocator: std.mem.Allocator, out: *std.ArrayList(u8), cmd: *const Command, depth: usize) !void {
-    var i: usize = 0;
-    while (i < depth) : (i += 1) try out.appendSlice(allocator, "  ");
-    try out.append(allocator, '*');
-    if (depth > 0) try out.append(allocator, '*');
-    try out.append(allocator, ' ');
-    const display_path = try commandPath(allocator, cmd);
-    defer allocator.free(display_path);
-    const anchor = try anchorForDisplayPath(allocator, display_path);
-    defer allocator.free(anchor);
-    try out.print(allocator, "xref:{s}[`{s}`]", .{ anchor, display_path });
-    if (cmd.description.len > 0) try out.print(allocator, " - {s}", .{cmd.description});
-    try out.append(allocator, '\n');
 }
 
 /// Builds the display spec string for a flag (e.g. `-m, --message <STRING>`).

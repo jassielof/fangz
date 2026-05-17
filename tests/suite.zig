@@ -491,3 +491,25 @@ test "key-value flag diagnostic for unknown value lists allowed levels" {
     };
     return error.TestExpectedError;
 }
+
+test "generateDocs refuses existing output when overwrite is false" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    const out_dir = "zig-out/fangz-docgen-overwrite-test";
+    std.Io.Dir.cwd().deleteTree(testing.io, out_dir) catch {};
+    defer std.Io.Dir.cwd().deleteTree(testing.io, out_dir) catch {};
+
+    try fangz.DocGenerator.generateDocs(testing.allocator, testing.io, app.root(), .{
+        .output_dir = out_dir,
+        .output_file_name = "cli.adoc",
+    });
+
+    const second = fangz.DocGenerator.generateDocs(testing.allocator, testing.io, app.root(), .{
+        .output_dir = out_dir,
+        .output_file_name = "cli.adoc",
+        .overwrite = false,
+    });
+
+    try testing.expectError(error.PathAlreadyExists, second);
+}
