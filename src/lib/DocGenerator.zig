@@ -46,7 +46,7 @@ pub fn generateDocs(
     );
     defer allocator.free(doc);
 
-    const output_path = try std.fs.path.join(allocator, &.{ options.output_dir, options.single_file_name });
+    const output_path = try std.fs.path.join(allocator, &.{ options.output_dir, options.output_file_name });
     defer allocator.free(output_path);
     try writeFile(io, output_path, doc, options.overwrite);
 }
@@ -240,7 +240,7 @@ fn runDocsCommand(ctx: *ParseContext) !void {
 
     try generateDocs(ctx.allocator, ctx.io, ctx.command.root(), .{
         .output_dir = output_dir,
-        .single_file_name = file,
+        .output_file_name = file,
         .template_path = template,
     });
 }

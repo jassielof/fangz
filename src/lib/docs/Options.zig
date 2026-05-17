@@ -2,9 +2,8 @@
 
 /// Output directory.
 output_dir: []const u8 = "zig-out/docs",
-// TODO: Rename to output_file_name
 /// Output file name.
-single_file_name: []const u8 = "cli.adoc",
+output_file_name: []const u8 = "cli.adoc",
 // TODO: Path to the directory? or the file name?
 /// Optional custom Trama template path.
 template_path: ?[]const u8 = null,
