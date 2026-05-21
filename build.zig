@@ -10,9 +10,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const carnaval = b.dependency("carnaval", .{});
-
-    const trama = b.dependency("trama", .{});
+    const carnaval = b.dependency("carnaval", .{}).module("carnaval");
+    const trama = b.dependency("trama", .{}).module("trama");
 
     const mod = b.addModule(
         mod_name,
@@ -23,11 +22,11 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{
                     .name = "carnaval",
-                    .module = carnaval.module("carnaval"),
+                    .module = carnaval,
                 },
                 .{
                     .name = "trama",
-                    .module = trama.module("trama"),
+                    .module = trama,
                 },
             },
         },
@@ -87,4 +86,34 @@ pub fn build(b: *std.Build) void {
 
     const run_integration_tests = b.addRunArtifact(integration_tests);
     test_step.dependOn(&run_integration_tests.step);
+
+    const lint_step = b.step("lint", "Run linters and code quality checks");
+
+    // const lizard = b.addSystemCommand(&.{
+    //     "lizard",
+    //     "--languages",
+    //     "zig",
+    //     "--CCN",
+    //     "10",
+    //     "--length",
+    //     "60",
+    //     "--arguments",
+    //     "7",
+    //     "--modified",
+    //     "--warnings_only",
+    //     "--extension",
+    //     "NS",
+    //     "--Threshold",
+    //     "max_nested_structures=3",
+    //     "src/",
+    // });
+    // lint_step.dependOn(&lizard.step);
+
+    const fmt = b.addFmt(.{
+        .check = true,
+        .paths = &.{
+            "src/",
+        },
+    });
+    lint_step.dependOn(&fmt.step);
 }
