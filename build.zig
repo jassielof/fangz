@@ -1,4 +1,5 @@
 const std = @import("std");
+const lizzy = @import("lizzy");
 
 const git = @import("build/git.zig");
 const metadata = @import("build/metadata.zig");
@@ -88,6 +89,9 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_integration_tests.step);
 
     const lint_step = b.step("check", "Run code quality checks");
+
+    const lizzy_step = lizzy.addStepWithBuildOptions(b, .{});
+    lint_step.dependOn(lizzy_step);
 
     const fmt = b.addFmt(.{
         .check = true,
