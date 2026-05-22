@@ -87,27 +87,7 @@ pub fn build(b: *std.Build) void {
     const run_integration_tests = b.addRunArtifact(integration_tests);
     test_step.dependOn(&run_integration_tests.step);
 
-    const lint_step = b.step("lint", "Run linters and code quality checks");
-
-    // const lizard = b.addSystemCommand(&.{
-    //     "lizard",
-    //     "--languages",
-    //     "zig",
-    //     "--CCN",
-    //     "10",
-    //     "--length",
-    //     "60",
-    //     "--arguments",
-    //     "7",
-    //     "--modified",
-    //     "--warnings_only",
-    //     "--extension",
-    //     "NS",
-    //     "--Threshold",
-    //     "max_nested_structures=3",
-    //     "src/",
-    // });
-    // lint_step.dependOn(&lizard.step);
+    const lint_step = b.step("check", "Run code quality checks");
 
     const fmt = b.addFmt(.{
         .check = true,
