@@ -356,6 +356,44 @@ test "doc generator renders nested commands as flat reference entries" {
     try testing.expect(std.mem.indexOf(u8, doc, "=== `fangz remote add`") != null);
 }
 
+test "doc generator uses valid asciidoc section levels and root xref anchor" {
+    var app = try makeApp();
+    defer app.deinit();
+    const io = testing.io;
+
+    const root = app.root();
+    _ = try root.addSubcommand(.{
+        .name = "run",
+        .brief = "Run the app",
+    });
+    try root.addFlag([]const fangz.KeyValuePair, .{
+        .name = "rule",
+        .short = 'r',
+        .allowed_keys = &.{ "alpha" },
+        .allowed_values = &.{ "allow", "deny" },
+        .key_metavar = "RULE",
+        .value_metavar = "LEVEL",
+    });
+
+    const out_dir = "zig-out/docgen-asciidoc";
+    std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
+    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
+
+    try fangz.DocGenerator.generateDocs(testing.allocator, io, root, .{
+        .output_dir = out_dir,
+    });
+
+    const doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/cli.adoc");
+    defer testing.allocator.free(doc);
+
+    const root_anchor = std.mem.indexOf(u8, doc, "[#cmd-fangz]") orelse return error.TestUnexpectedResult;
+    const synopsis = std.mem.indexOf(u8, doc, "== Synopsis") orelse return error.TestUnexpectedResult;
+    try testing.expect(root_anchor < synopsis);
+    try testing.expect(std.mem.indexOf(u8, doc, "===== Options") == null);
+    try testing.expect(std.mem.indexOf(u8, doc, "==== Options") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, "xref:cmd-fangz[`fangz`]") != null);
+}
+
 test "app docs include configured author and revision metadata" {
     var app = try fangz.App.init(testing.allocator, testing.io, .{
         .display_name = "Git",

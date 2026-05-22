@@ -10,7 +10,8 @@
 {{ description }}
 --
 
-{{ end }}== Synopsis
+{{ end }}[#{{ root.anchor }}]
+== Synopsis
 
 [source,sh]
 ----
@@ -121,9 +122,9 @@ Parent: xref:{{ parent_anchor }}[`{{ @raw parent_display_path }}`]
 {{ @raw usage }}
 ----
 
-{{ if has_positionals }}===== Arguments
+{{ if has_positionals }}==== Arguments
 
-{{ range positionals }}====== `{{ @raw display }}`
+{{ range positionals }}===== `{{ @raw display }}`
 
 {{ brief }}
 
@@ -134,16 +135,16 @@ Parent: xref:{{ parent_anchor }}[`{{ @raw parent_display_path }}`]
 
 {{ if has_possible_values }}*Possible values:* `{{ join possible_values "`, `" }}`
 {{ end }}
-{{ end }}{{ end }}{{ if has_options }}===== Options
+{{ end }}{{ end }}{{ if has_options }}==== Options
 
-{{ range options }}====== `{{ @raw full_signature }}`
+{{ range options }}===== `{{ @raw full_signature }}`
 
 {{ brief }}
 
 {{ if description }}
 
 {{ description }}
-{{ end }}{{ if has_key_value_metadata }}======= Severity levels
+{{ end }}{{ if has_key_value_metadata }}====== Severity levels
 
 [cols="1,4"]
 |===
@@ -154,7 +155,7 @@ Parent: xref:{{ parent_anchor }}[`{{ @raw parent_display_path }}`]
 {{ end }}
 |===
 
-======= Rules and defaults
+====== Rules and defaults
 
 [cols="2,1,5"]
 |===
@@ -166,14 +167,14 @@ Parent: xref:{{ parent_anchor }}[`{{ @raw parent_display_path }}`]
 {{ end }}
 |===
 
-{{ if kv_override_note }}======= Override behavior
+{{ if kv_override_note }}====== Override behavior
 
 {{ kv_override_note }}
 {{ end }}{{ end }}{{ if has_default }}*Default:* `{{ default_value }}`
 {{ end }}{{ if has_possible_values }}*Possible values:* `{{ join possible_values "`, `" }}`
 {{ end }}*Scope:* `{{ scope }}`
 
-{{ if flag_examples }}======= Examples
+{{ if flag_examples }}====== Examples
 
 {{ range flag_examples }}{{ if description }}{{ description}}
 
@@ -181,7 +182,7 @@ Parent: xref:{{ parent_anchor }}[`{{ @raw parent_display_path }}`]
 ----
 {{ command }}
 ----
-{{ end }}{{ end }}{{ if kv_examples }}======= More examples
+{{ end }}{{ end }}{{ if kv_examples }}====== More examples
 
 {{ range kv_examples }}{{ if description }}{{ description}}
 
@@ -190,7 +191,7 @@ Parent: xref:{{ parent_anchor }}[`{{ @raw parent_display_path }}`]
 {{ command }}
 ----
 {{ end }}{{ end }}
-{{ end }}{{ end }}{{ if has_subcommands }}===== Subcommands
+{{ end }}{{ end }}{{ if has_subcommands }}==== Subcommands
 
 {{ range subcommands }}* xref:{{ anchor }}[`{{ @raw display_path }}`]{{ if brief }} — {{ brief }}{{ end }}
 {{ end }}
