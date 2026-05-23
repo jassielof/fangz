@@ -224,13 +224,16 @@ pub fn registerDocsCommand(root: *Command) !void {
 
     try docs.addFlag([]const u8, .{
         .name = "output-dir",
-        .brief = "Directory where AsciiDoc documentation is written.",
+        .short = 'o',
+        .brief = "Output directory where the AsciiDoc documentation is written.",
         .default = "docs",
     });
 
     try docs.addFlag([]const u8, .{
         .name = "file",
-        .brief = "Output AsciiDoc file name.",
+        .short = 'f',
+        .brief = "Output file name.",
+        // TODO: Find a way to possibly set the file name to the module name, for example, for docent itself it would be `docent.adoc`, instead of a fixed `cli.adoc` across all applications.
         .default = "cli.adoc",
     });
 
