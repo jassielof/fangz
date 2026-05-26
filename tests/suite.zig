@@ -316,7 +316,7 @@ test "doc generator writes single asciidoc file by default" {
         .output_dir = out_dir,
     });
 
-    const path = out_dir ++ "/cli.adoc";
+    const path = out_dir ++ "/fangz.adoc";
     const content = try readFileAlloc(io, testing.allocator, path);
     defer testing.allocator.free(content);
 
@@ -349,7 +349,7 @@ test "doc generator renders nested commands as flat reference entries" {
         .output_dir = out_dir,
     });
 
-    const doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/cli.adoc");
+    const doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/fangz.adoc");
     defer testing.allocator.free(doc);
     try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-fangz-remote]") != null);
     try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-fangz-remote-add]") != null);
@@ -383,7 +383,7 @@ test "doc generator uses valid asciidoc section levels and root xref anchor" {
         .output_dir = out_dir,
     });
 
-    const doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/cli.adoc");
+    const doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/fangz.adoc");
     defer testing.allocator.free(doc);
 
     const root_anchor = std.mem.indexOf(u8, doc, "[#cmd-fangz]") orelse return error.TestUnexpectedResult;
@@ -416,7 +416,7 @@ test "app docs include configured author and revision metadata" {
         .output_dir = out_dir,
     });
 
-    const doc = try readFileAlloc(testing.io, testing.allocator, out_dir ++ "/cli.adoc");
+    const doc = try readFileAlloc(testing.io, testing.allocator, out_dir ++ "/fangz.adoc");
     defer testing.allocator.free(doc);
 
     try testing.expect(std.mem.indexOf(u8, doc, "= Git: Distributed Version Control") != null);

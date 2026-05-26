@@ -342,7 +342,7 @@ fn ensureCompletionCommand(self: *App) !void {
 fn ensureDocsCommand(self: *App) !void {
     if (!self.docs_enabled) return;
     if (self.docs_registered) return;
-    try DocGenerator.registerDocsCommand(self.root());
+    try DocGenerator.registerDocsCommand(meta.name, self.root());
     self.docs_registered = true;
 }
 

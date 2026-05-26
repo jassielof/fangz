@@ -47,9 +47,25 @@ pub fn generateDocs(
     );
     defer allocator.free(doc);
 
-    const output_path = try std.fs.path.join(allocator, &.{ options.output_dir, options.output_file_name });
+    var output_file_name_owned: ?[]u8 = null;
+    defer if (output_file_name_owned) |buf| allocator.free(buf);
+
+    const output_file_name: []const u8 = if (options.output_file_name.len == 0) blk: {
+        output_file_name_owned = try defaultOutputFileName(allocator, root.name);
+        break :blk output_file_name_owned.?;
+    } else options.output_file_name;
+
+    const output_path = try std.fs.path.join(allocator, &.{ options.output_dir, output_file_name });
     defer allocator.free(output_path);
     try writeFile(io, output_path, doc, options.overwrite);
+}
+
+fn defaultOutputFileNameComptime(comptime binary_name: []const u8) []const u8 {
+    return comptime binary_name ++ ".adoc";
+}
+
+fn defaultOutputFileName(allocator: std.mem.Allocator, binary_name: []const u8) ![]u8 {
+    return std.fmt.allocPrint(allocator, "{s}.adoc", .{binary_name});
 }
 
 fn renderSingleFile(
@@ -214,7 +230,7 @@ fn appendHelpCommandDoc(
 /// Registers the built-in `docs` subcommand on root.
 ///
 /// Generates AsciiDoc documentation for the application's full command tree. Called automatically by `App.ensureDocsCommand` — applications do not need to call this directly.
-pub fn registerDocsCommand(root: *Command) !void {
+pub fn registerDocsCommand(comptime binary_name: []const u8, root: *Command) !void {
     if (root.findSubcommand("docs") != null) return;
 
     const docs = try root.addSubcommand(.{
@@ -233,8 +249,7 @@ pub fn registerDocsCommand(root: *Command) !void {
         .name = "file",
         .short = 'f',
         .brief = "Output file name.",
-        // TODO: Find a way to possibly set the file name to the module name, for example, for docent itself it would be `docent.adoc`, instead of a fixed `cli.adoc` across all applications.
-        .default = "cli.adoc",
+        .default = defaultOutputFileNameComptime(binary_name),
     });
 
     try docs.addFlag([]const u8, .{
@@ -247,7 +262,12 @@ pub fn registerDocsCommand(root: *Command) !void {
 
 fn runDocsCommand(ctx: *ParseContext) !void {
     const output_dir = ctx.stringFlag("output-dir") orelse "docs";
-    const file = ctx.stringFlag("file") orelse "cli.adoc";
+    var file_owned: ?[]u8 = null;
+    defer if (file_owned) |buf| ctx.allocator.free(buf);
+    const file = ctx.stringFlag("file") orelse blk: {
+        file_owned = try defaultOutputFileName(ctx.allocator, ctx.command.root().name);
+        break :blk file_owned.?;
+    };
     const template = ctx.stringFlag("template");
 
     try generateDocs(ctx.allocator, ctx.io, ctx.command.root(), .{
