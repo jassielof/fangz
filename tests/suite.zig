@@ -5,6 +5,7 @@ const fangz = @import("fangz");
 
 comptime {
     testing.refAllDecls(@This());
+    testing.refAllDecls(@import("cli_ux.zig"));
 }
 
 fn makeApp() !fangz.App {
