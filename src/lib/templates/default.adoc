@@ -80,6 +80,7 @@
 {{ end }}{{ if has_possible_values }}*Possible values:* `{{ join possible_values "`, `" }}`
 {{ end }}*Scope:* `{{ scope }}`
 
+// TODO: Examples, should use the appropiate examples format in AsciiDoc. Which are just like figures, examples, should be a list, its name being the examples caption, and its content being the example content, each element within the examples list, is a separate example.
 {{ if flag_examples }}==== Examples
 
 {{ range flag_examples }}{{ if description }}{{ description}}
