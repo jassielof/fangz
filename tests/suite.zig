@@ -357,6 +357,30 @@ test "doc generator renders nested commands as flat reference entries" {
     try testing.expect(std.mem.indexOf(u8, doc, "=== `fangz remote add`") != null);
 }
 
+test "doc generator renders examples as captioned asciidoc example blocks" {
+    var app = try makeApp();
+    defer app.deinit();
+    const io = testing.io;
+
+    app.root().examples = &.{
+        .{ .description = "Show help", .command = "fangz --help" },
+    };
+
+    const out_dir = "zig-out/docgen-examples";
+    std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
+    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
+
+    try fangz.DocGenerator.generateDocs(testing.allocator, io, app.root(), .{
+        .output_dir = out_dir,
+    });
+
+    const doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/fangz.adoc");
+    defer testing.allocator.free(doc);
+
+    try testing.expect(std.mem.indexOf(u8, doc, "== Examples") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, ".Show help\n====\n[source,sh]\n----\nfangz --help\n----\n====") != null);
+}
+
 test "doc generator uses valid asciidoc section levels and root xref anchor" {
     var app = try makeApp();
     defer app.deinit();
