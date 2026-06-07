@@ -180,6 +180,7 @@ Parent: xref:{{ parent_anchor }}[`{{ @raw parent_display_path }}`]
 {{ end }}{{ if has_possible_values }}*Possible values:* `{{ join possible_values "`, `" }}`
 {{ end }}*Scope:* `{{ scope }}`
 
+// TODO: Examples aren't well formatted
 {{ if flag_examples }}====== Examples
 
 {{ range flag_examples }}{{ if description }}.{{ description }}
