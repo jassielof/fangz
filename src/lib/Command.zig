@@ -52,10 +52,14 @@ pub const KeyValuePair = struct {
 
 pub const KeyValueList = []const KeyValuePair;
 
-/// Example command shown in long help and generated documentation.
+/// Example shown in long help and generated documentation.
 pub const CliExample = struct {
+    /// Caption for generated AsciiDoc example blocks.
     description: []const u8 = "",
-    command: []const u8,
+    /// Plain command line shown in terminal long help.
+    command: []const u8 = "",
+    /// AsciiDoc body placed inside example blocks in generated docs. When empty, docs derive a `[source,sh]` block from `command`.
+    content: []const u8 = "",
 };
 
 /// Metadata for one allowed key in a key-value CLI flag (e.g. `--rule <RULE=LEVEL>`).

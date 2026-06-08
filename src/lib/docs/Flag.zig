@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Command = @import("../Command.zig");
+const Example = @import("Example.zig");
 const Flag = @import("Flag.zig");
 
 name: []const u8,
@@ -28,8 +29,8 @@ has_key_value_metadata: bool,
 kv_keys: []const Command.KeyValueKeyMeta,
 kv_values: []const Command.KeyValueValueMeta,
 kv_override_note: []const u8,
-flag_examples: []const Command.CliExample,
-kv_examples: []const Command.CliExample,
+flag_examples: []Example,
+kv_examples: []Example,
 
 pub fn deinit(self: *Flag, allocator: std.mem.Allocator) void {
     if (self.value_hint_owned) |s| allocator.free(s);
@@ -37,4 +38,12 @@ pub fn deinit(self: *Flag, allocator: std.mem.Allocator) void {
     allocator.free(self.long_display);
     allocator.free(self.full_signature);
     allocator.free(self.default_value);
+    if (self.flag_examples.len > 0) {
+        for (self.flag_examples) |*ex| ex.deinit(allocator);
+        allocator.free(self.flag_examples);
+    }
+    if (self.kv_examples.len > 0) {
+        for (self.kv_examples) |*ex| ex.deinit(allocator);
+        allocator.free(self.kv_examples);
+    }
 }

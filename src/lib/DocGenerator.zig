@@ -8,6 +8,7 @@ const trama = @import("trama");
 
 const Command = @import("Command.zig");
 pub const CommandDoc = @import("docs/Command.zig");
+pub const ExampleDoc = @import("docs/Example.zig");
 pub const FlagDoc = @import("docs/Flag.zig");
 pub const DocumentModel = @import("docs/Model.zig");
 pub const Options = @import("docs/Options.zig");
@@ -156,7 +157,7 @@ fn buildDocumentModel(
         .source_date = root.source_date,
         .app_name_attribute = root.name,
         .toc = options.toc_position.toString(),
-        .app_examples = root.examples orelse &.{},
+        .app_examples = try buildExamples(allocator, root.examples orelse &.{}),
         .help_command_anchor = help_command_anchor,
         .root = if (commands_flat.len > 0) commands_flat[0] else CommandDoc.empty(),
         .subcommand_reference = subcommand_reference,
@@ -493,9 +494,29 @@ fn flagDocFromFlag(allocator: std.mem.Allocator, flag: Command.Flag, scope: []co
         .kv_keys = if (has_kv) kv.?.keys else &.{},
         .kv_values = if (has_kv) kv.?.values else &.{},
         .kv_override_note = if (has_kv) kv.?.override_behavior_note else "",
-        .flag_examples = flag.examples orelse &.{},
-        .kv_examples = if (has_kv) kv.?.examples else &.{},
+        .flag_examples = try buildExamples(allocator, flag.examples orelse &.{}),
+        .kv_examples = try buildExamples(allocator, if (has_kv) kv.?.examples else &.{}),
     };
+}
+
+fn buildExamples(allocator: std.mem.Allocator, examples: []const Command.CliExample) ![]ExampleDoc {
+    if (examples.len == 0) return &.{};
+    const out = try allocator.alloc(ExampleDoc, examples.len);
+    errdefer allocator.free(out);
+
+    for (examples, 0..) |ex, i| {
+        out[i] = .{
+            .description = ex.description,
+            .content = try exampleDocContent(allocator, ex),
+            .content_owned = true,
+        };
+    }
+    return out;
+}
+
+fn exampleDocContent(allocator: std.mem.Allocator, ex: Command.CliExample) ![]const u8 {
+    if (ex.content.len > 0) return allocator.dupe(u8, ex.content);
+    return std.fmt.allocPrint(allocator, "[source,sh]\n----\n{s}\n----", .{ex.command});
 }
 
 fn builtinFlagDoc(allocator: std.mem.Allocator, signature: []const u8, name: []const u8, brief: []const u8) !FlagDoc {
