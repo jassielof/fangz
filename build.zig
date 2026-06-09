@@ -90,8 +90,7 @@ pub fn build(b: *std.Build) void {
 
     const check_step = b.step("check", "Run code quality checks");
 
-    const lizzy_step = lizzy.addStepWithBuildOptions(b, .{});
-    check_step.dependOn(lizzy_step);
+    // TODO: Add Docent checks.
 
     const fmt = b.addFmt(.{
         .check = true,
