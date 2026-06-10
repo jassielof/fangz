@@ -90,8 +90,6 @@ pub fn build(b: *std.Build) void {
 
     const check_step = b.step("check", "Run code quality checks");
 
-    // TODO: Add Docent checks.
-
     const fmt = b.addFmt(.{
         .check = true,
         .paths = &.{
