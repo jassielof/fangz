@@ -98,9 +98,11 @@ pub const DefaultValue = union(enum) {
 
 /// Controls how `allowed_values` are rendered in help output.
 pub const AllowedValuesStyle = enum {
-    /// Shows values inline: "[possible values: a, b, c]".
+    /// Up to three values on one line; four or more as a bullet list.
+    auto,
+    /// Comma-separated values on a metadata line below the summary.
     comma,
-    /// Shows values as a Carnaval bullet list below the argument/flag description.
+    /// Bullet list on metadata lines below the summary.
     bullet_list,
 };
 
@@ -123,7 +125,7 @@ pub const Flag = struct {
     allowed_keys: ?[]const []const u8 = null,
     value_hint: ?[]const u8 = null,
     /// Controls how `allowed_values` are rendered in help output.
-    allowed_values_style: AllowedValuesStyle = .comma,
+    allowed_values_style: AllowedValuesStyle = .auto,
     /// Optional display labels for each allowed value, shown alongside the value in help output.
     /// When provided, must have the same length as `allowed_values`.
     allowed_value_labels: ?[]const []const u8 = null,
@@ -210,7 +212,7 @@ pub fn FlagOptions(comptime T: type) type {
         allowed_keys: ?[]const []const u8 = null,
         allowed_values: ?[]const []const u8 = null,
         /// Controls how `allowed_values` are rendered in help output.
-        allowed_values_style: AllowedValuesStyle = .comma,
+        allowed_values_style: AllowedValuesStyle = .auto,
         /// Optional display labels for each allowed value, shown alongside the value in help output.
         allowed_value_labels: ?[]const []const u8 = null,
         key_metavar: ?[]const u8 = null,
@@ -304,10 +306,10 @@ pub const Positional = struct {
     description: []const u8 = "",
     required: bool = false,
     variadic: bool = false,
-    /// Optional constrained value set shown as `[possible values: ...]` in help.
+    /// Optional constrained value set shown on a metadata line in help.
     allowed_values: ?[]const []const u8 = null,
     /// Controls how `allowed_values` are rendered in help output.
-    allowed_values_style: AllowedValuesStyle = .comma,
+    allowed_values_style: AllowedValuesStyle = .auto,
     /// Optional display labels for each allowed value, shown alongside the value in help output.
     /// When provided, must have the same length as `allowed_values`.
     allowed_value_labels: ?[]const []const u8 = null,

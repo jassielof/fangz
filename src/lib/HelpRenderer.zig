@@ -6,6 +6,14 @@ const carnaval = @import("carnaval");
 const ColorProfile = carnaval.ColorProfile;
 
 const Command = @import("Command.zig");
+const HelpMetadata = @import("HelpMetadata.zig");
+
+/// Target wrap width for help prose (brief, long descriptions, example blurbs).
+/// Aligned option/command summaries keep using the live terminal width instead.
+const help_prose_width = 70;
+
+/// Continuation indent for wrapped help prose.
+const prose_continuation_indent = 2;
 
 /// Controls the verbosity of the rendered help output.
 ///
@@ -26,8 +34,10 @@ pub fn render(
     try carnaval.Style.init().bolded().renderWithProfile(display_path, writer, profile);
     try writer.print("\n", .{});
 
+    const terminal_width = carnaval.terminalWidthForHandle(std.Io.File.stdout().handle);
+
     if (command.brief.len > 0) {
-        try writer.print("{s}\n", .{command.brief});
+        try printWrappedProse(writer, command.brief, 0, command.allocator);
     }
 
     if (mode == .full) {
@@ -39,7 +49,7 @@ pub fn render(
 
                 for (exs) |ex| {
                     if (ex.description.len > 0) {
-                        try writer.print("  {s}\n", .{ex.description});
+                        try printWrappedProse(writer, ex.description, 2, command.allocator);
                     }
                     try writer.print("    {s}\n", .{ex.command});
                 }
@@ -48,7 +58,8 @@ pub fn render(
     }
 
     if (mode == .full and command.description.len > 0) {
-        try writer.print("\n{s}\n", .{command.description});
+        try writer.print("\n", .{});
+        try printWrappedProse(writer, command.description, 0, command.allocator);
     }
 
     if (command.aliases.items.len > 0) {
@@ -60,7 +71,6 @@ pub fn render(
         }
     }
 
-    const terminal_width = carnaval.terminalWidthForHandle(std.Io.File.stdout().handle);
     try renderUsage(writer, command, profile, display_path);
 
     if (command.positionals.items.len > 0) {
@@ -131,7 +141,7 @@ fn renderUsage(writer: *std.Io.Writer, command: *const Command, profile: ColorPr
     {
         const pos0 = command.positionals.items[0];
         if (pos0.variadic and !pos0.required) {
-            try writer.print(" [PATHS]...", .{});
+            try writer.print(" [PATHS]{s}", .{HelpMetadata.variadic_metavar_suffix});
             try writer.print("\n{s} <COMMAND>", .{display_path});
             try writer.print("\n", .{});
 
@@ -145,7 +155,7 @@ fn renderUsage(writer: *std.Io.Writer, command: *const Command, profile: ColorPr
 
     for (command.positionals.items) |pos| {
         if (pos.variadic) {
-            try writer.print(" <{s}>...", .{pos.name});
+            try writer.print(" <{s}>{s}", .{ pos.name, HelpMetadata.variadic_metavar_suffix });
         } else if (pos.required) {
             try writer.print(" <{s}>", .{pos.name});
         } else {
@@ -159,9 +169,11 @@ fn renderUsage(writer: *std.Io.Writer, command: *const Command, profile: ColorPr
 /// Renders positional arguments table-like list.
 fn renderArguments(writer: *std.Io.Writer, command: *const Command, profile: ColorProfile, terminal_width: usize, mode: HelpMode) !void {
     var spec_width: usize = 0;
+    const suffix_len = HelpMetadata.variadic_metavar_suffix.len;
+
     for (command.positionals.items) |arg| {
         var len = arg.name.len + 2;
-        if (arg.variadic) len += 3;
+        if (arg.variadic) len += suffix_len;
         if (len > spec_width) spec_width = len;
     }
 
@@ -169,71 +181,24 @@ fn renderArguments(writer: *std.Io.Writer, command: *const Command, profile: Col
         var spec_buf: [128]u8 = undefined;
         var sw: std.Io.Writer = .fixed(&spec_buf);
         try sw.print("<{s}>", .{arg.name});
-        if (arg.variadic) try sw.print("...", .{});
-
-        var desc_buf: [512]u8 = undefined;
-        var dw: std.Io.Writer = .fixed(&desc_buf);
-        if (arg.brief.len > 0) try dw.print("{s}", .{arg.brief});
-        // [required] is communicated by <name> in the Usage line; do not repeat it here.
-        if (arg.variadic) try dw.print(" [variadic]", .{});
-        if (arg.allowed_values) |vals| {
-            switch (arg.allowed_values_style) {
-                .comma => {
-                    try dw.print(" [possible: ", .{});
-                    for (vals, 0..) |v, i| {
-                        if (i != 0) try dw.print(", ", .{});
-                        try dw.print("{s}", .{v});
-                    }
-                    try dw.print("]", .{});
-                },
-                .bullet_list => {
-                    // Append inline label; bullets rendered after the row.
-                    if (dw.end > 0) {
-                        try dw.print(" One of:", .{});
-                    } else {
-                        try dw.print("One of:", .{});
-                    }
-                },
-            }
-        }
+        if (arg.variadic) try sw.print("{s}", .{HelpMetadata.variadic_metavar_suffix});
 
         try printAlignedCommandRow(
             writer,
             profile,
             "  ",
             spec_buf[0..sw.end],
-            desc_buf[0..dw.end],
+            arg.brief,
             spec_width,
             terminal_width,
             command.allocator,
         );
 
-        if (mode == .full and arg.description.len > 0) {
-            const indent = 2 + spec_width + 2;
-            try printSpaces(writer, indent);
-            try writer.print("{s}\n", .{arg.description});
-        }
+        const continuation_pad = 2 + spec_width + 2;
+        try HelpMetadata.renderPositionalMetadata(writer, profile, arg, continuation_pad);
 
-        if (arg.allowed_values) |vals| {
-            if (arg.allowed_values_style == .bullet_list) {
-                // Bullets are indented 2 spaces past the description column.
-                const continuation_pad = 2 + spec_width + 2;
-                var max_val_width: usize = 0;
-                for (vals) |v| {
-                    if (v.len > max_val_width) max_val_width = v.len;
-                }
-                for (vals, 0..) |v, i| {
-                    try printSpaces(writer, continuation_pad + 2);
-                    try writer.print("\u{2022} {s}", .{v});
-                    if (arg.allowed_value_labels) |lbls| {
-                        if (i < lbls.len and lbls[i].len > 0) {
-                            if (max_val_width > v.len) try printSpaces(writer, max_val_width - v.len);
-                            try writer.print("  {s}", .{lbls[i]});
-                        }
-                    }
-                    try writer.print("\n", .{});
-                }
-            }
+        if (mode == .full and arg.description.len > 0) {
+            try printWrappedProse(writer, arg.description, continuation_pad, command.allocator);
         }
     }
 }
@@ -392,87 +357,22 @@ fn renderOneFlag(
             spec_len += ty.len;
             spec_buf[spec_len] = '>';
             spec_len += 1;
-            if (flag.value_type == .string_list or flag.value_type == .key_value_list) {
-                spec_buf[spec_len] = '.';
-                spec_len += 1;
-                spec_buf[spec_len] = '.';
-                spec_len += 1;
-                spec_buf[spec_len] = '.';
-                spec_len += 1;
-            }
         }
     }
 
-    var desc_buf: [512]u8 = undefined;
-    var d: std.Io.Writer = .fixed(&desc_buf);
-    try d.print("{s}", .{flag.brief});
-    if (flag.required) try d.print(" [required]", .{});
+    try printAlignedOptionRow(writer, profile, spec_buf[0..spec_len], flag.brief, spec_width, terminal_width, allocator);
 
-    if (flag.default_value) |dv| {
-        switch (dv) {
-            .bool => |v| try d.print(" [default: {s}]", .{if (v) "true" else "false"}),
-            .string => |v| try d.print(" [default: {s}]", .{v}),
-            .int => |v| try d.print(" [default: {}]", .{v}),
-            .float => |v| try d.print(" [default: {d}]", .{v}),
-            .enum_tag => |ordinal| try d.print(" [default: {s}]", .{enumTagName(flag, ordinal)}),
-            .string_list => try d.print(" [default: set]", .{}),
-        }
-    }
-
-    if (flag.allowed_values) |values| {
-        if (flag.value_type == .key_value_list and flag.allowed_keys != null) {
-            //
-        } else switch (flag.allowed_values_style) {
-            .comma => {
-                try d.print(" [possible: ", .{});
-                for (values, 0..) |v, i| {
-                    if (i != 0) try d.print(", ", .{});
-                    try d.print("{s}", .{v});
-                }
-                try d.print("]", .{});
-            },
-            .bullet_list => {
-                if (d.end > 0) {
-                    try d.print(" One of:", .{});
-                } else {
-                    try d.print("One of:", .{});
-                }
-            },
-        }
-    }
-
-    if (is_global) try d.print(" [global]", .{});
-
-    try printAlignedOptionRow(writer, profile, spec_buf[0..spec_len], desc_buf[0..d.end], spec_width, terminal_width, allocator);
-
-    if (flag.allowed_values) |values| {
-        if (flag.value_type == .key_value_list and flag.allowed_keys != null) {
-            //
-        } else if (flag.allowed_values_style == .bullet_list) {
-            const continuation_pad = 2 + spec_width + 2;
-            var max_val_width: usize = 0;
-            for (values) |v| {
-                if (v.len > max_val_width) max_val_width = v.len;
-            }
-            for (values, 0..) |v, i| {
-                try printSpaces(writer, continuation_pad + 2);
-                try writer.print("\u{2022} {s}", .{v});
-                if (flag.allowed_value_labels) |lbls| {
-                    if (i < lbls.len and lbls[i].len > 0) {
-                        if (max_val_width > v.len) try printSpaces(writer, max_val_width - v.len);
-                        try writer.print("  {s}", .{lbls[i]});
-                    }
-                }
-                try writer.print("\n", .{});
-            }
-        }
-    }
+    const continuation_pad = 2 + spec_width + 2;
+    const enum_name = if (flag.default_value) |dv| switch (dv) {
+        .enum_tag => |ordinal| enumTagName(flag, ordinal),
+        else => "",
+    } else "";
+    try HelpMetadata.renderFlagMetadata(writer, profile, flag, is_global, continuation_pad, enum_name);
 
     // In full-help mode, render long prose indented below the row.
     if (mode == .full and flag.description.len > 0) {
         const indent = 4 + spec_width + 2;
-        try printSpaces(writer, indent);
-        try writer.print("{s}\n", .{flag.description});
+        try printWrappedProse(writer, flag.description, indent, allocator);
     }
 
     if (mode == .full) {
@@ -486,8 +386,7 @@ fn renderOneFlag(
 
                 for (exs) |ex| {
                     if (ex.description.len > 0) {
-                        try printSpaces(writer, indent + 2);
-                        try writer.print("{s}\n", .{ex.description});
+                        try printWrappedProse(writer, ex.description, indent + 2, allocator);
                     }
 
                     try printSpaces(writer, indent + 2);
@@ -504,8 +403,7 @@ fn renderOneFlag(
 
                 for (kv.examples) |ex| {
                     if (ex.description.len > 0) {
-                        try printSpaces(writer, indent + 2);
-                        try writer.print("{s}\n", .{ex.description});
+                        try printWrappedProse(writer, ex.description, indent + 2, allocator);
                     }
                     try printSpaces(writer, indent + 2);
                     try writer.print("{s}\n", .{ex.command});
@@ -513,8 +411,7 @@ fn renderOneFlag(
             }
 
             if (kv.override_behavior_note.len > 0) {
-                try printSpaces(writer, indent);
-                try writer.print("{s}\n", .{kv.override_behavior_note});
+                try printWrappedProse(writer, kv.override_behavior_note, indent, allocator);
             }
         }
     }
@@ -543,10 +440,7 @@ fn optionSpecLen(flag: Command.Flag) usize {
         break :blk ty.len;
     };
 
-    if (ty_len > 0) {
-        len += ty_len + 3; // " <type>"
-        if (flag.value_type == .string_list or flag.value_type == .key_value_list) len += 3; // "..."
-    }
+    if (ty_len > 0) len += ty_len + 3; // " <type>"
 
     return len;
 }
@@ -614,7 +508,7 @@ fn printMultilineDescription(
     }
 
     const max_desc_width = if (terminal_width > continuation_pad + 4) terminal_width - continuation_pad - 2 else 20;
-    const wrapped = try carnaval.wrap(desc, max_desc_width, 0, allocator);
+    const wrapped = try carnaval.wrapWithOptions(desc, max_desc_width, carnaval.WrapOptions.prose, allocator);
     defer allocator.free(wrapped);
 
     var lines = std.mem.splitScalar(u8, wrapped, '\n');
@@ -623,6 +517,29 @@ fn printMultilineDescription(
     }
     while (lines.next()) |line| {
         try printSpaces(writer, continuation_pad);
+        try writer.print("{s}\n", .{line});
+    }
+}
+
+/// Wraps and prints a help prose block at `help_prose_width` with optional left margin.
+fn printWrappedProse(
+    writer: *std.Io.Writer,
+    text: []const u8,
+    left_margin: usize,
+    allocator: std.mem.Allocator,
+) !void {
+    if (text.len == 0) return;
+
+    const wrapped = try carnaval.wrapWithOptions(text, help_prose_width, carnaval.WrapOptions.prose, allocator);
+    defer allocator.free(wrapped);
+
+    var lines = std.mem.splitScalar(u8, wrapped, '\n');
+    if (lines.next()) |first| {
+        try printSpaces(writer, left_margin);
+        try writer.print("{s}\n", .{first});
+    }
+    while (lines.next()) |line| {
+        try printSpaces(writer, left_margin + prose_continuation_indent);
         try writer.print("{s}\n", .{line});
     }
 }

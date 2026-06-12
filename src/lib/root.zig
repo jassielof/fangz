@@ -3,8 +3,6 @@
 const std = @import("std");
 const refAllDecls = std.testing.refAllDecls;
 
-// TODO: Implement word-wrapping for help messages, and choose a very sane default optimized for readability, consider special cases, like URLs, paths, etc. that shouldn't be wrapped to break links. The implementation should be partially implemented in the Carnaval module/dependency, as it's related to terminal output formatting and styling, but it should obviously be consumed and adjusted in Fangz to fit the needs of help message formatting.
-
 pub const App = @import("App.zig");
 pub const Command = @import("Command.zig");
 pub const CliExample = Command.CliExample;
