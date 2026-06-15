@@ -15,6 +15,7 @@ const help_prose_width = 70;
 /// Continuation indent for wrapped help prose.
 const prose_continuation_indent = 2;
 
+// TODO: By default the long help prints more information about the defaults and such, but the short help sholdn't print these. These additional default..., repeatable, values..., should only be printed on full help.
 /// Controls the verbosity of the rendered help output.
 ///
 /// - `.short` — compact output triggered by `-h`: synopsis, argument list, flag list with one-liner summaries only.
