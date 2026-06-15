@@ -180,6 +180,48 @@ test "help metadata uses distinct variadic and repeatable markers" {
     try testing.expect(std.mem.indexOf(u8, text, "[default:") == null);
 }
 
+test "short help omits metadata annotations" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    try app.root().addPositional(.{
+        .name = "paths",
+        .brief = "Files or directories to analyze.",
+        .variadic = true,
+    });
+
+    try app.root().addFlag([]const []const u8, .{
+        .name = "bin",
+        .brief = "Analyze specific binary by name",
+        .value_hint = "STRING",
+        .multi = true,
+    });
+
+    try app.root().addFlag(OutputMode, .{
+        .name = "format",
+        .short = 'f',
+        .brief = "Output format",
+        .value_hint = "FORMAT",
+        .default = .pretty,
+        .allowed_values_style = .comma,
+    });
+
+    try app.root_command.freeze();
+
+    var buf: [32768]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .short);
+    const text = writer.buffered();
+
+    try testing.expect(std.mem.indexOf(u8, text, "Accepts multiple values") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "Repeatable") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "Allowed") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "(default)") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "Default:") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "<paths>*") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "--bin") != null);
+}
+
 test "help enum defaults are marked on allowed values" {
     var app = try makeApp();
     defer app.deinit();

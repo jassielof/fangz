@@ -15,11 +15,10 @@ const help_prose_width = 70;
 /// Continuation indent for wrapped help prose.
 const prose_continuation_indent = 2;
 
-// TODO: By default the long help prints more information about the defaults and such, but the short help sholdn't print these. These additional default..., repeatable, values..., should only be printed on full help.
 /// Controls the verbosity of the rendered help output.
 ///
-/// - `.short` — compact output triggered by `-h`: synopsis, argument list, flag list with one-liner summaries only.
-/// - `.full`  — complete output triggered by `--help` or `help <cmd>`: same as short plus per-flag `description` and per-command `description` (long prose).
+/// - `.short` — compact output triggered by `-h`: synopsis, argument list, flag list with one-liner summaries only (no metadata lines).
+/// - `.full`  — complete output triggered by `--help` or `help <cmd>`: same as short plus per-flag `description`, allowed values, defaults, and other metadata.
 pub const HelpMode = enum { short, full };
 
 /// Renders command help sections to the provided writer.
@@ -196,7 +195,9 @@ fn renderArguments(writer: *std.Io.Writer, command: *const Command, profile: Col
         );
 
         const continuation_pad = 2 + spec_width + 2;
-        try HelpMetadata.renderPositionalMetadata(writer, profile, arg, continuation_pad);
+        if (mode == .full) {
+            try HelpMetadata.renderPositionalMetadata(writer, profile, arg, continuation_pad);
+        }
 
         if (mode == .full and arg.description.len > 0) {
             try printWrappedProse(writer, arg.description, continuation_pad, command.allocator);
@@ -364,11 +365,13 @@ fn renderOneFlag(
     try printAlignedOptionRow(writer, profile, spec_buf[0..spec_len], flag.brief, spec_width, terminal_width, allocator);
 
     const continuation_pad = 2 + spec_width + 2;
-    const enum_name = if (flag.default_value) |dv| switch (dv) {
-        .enum_tag => |ordinal| enumTagName(flag, ordinal),
-        else => "",
-    } else "";
-    try HelpMetadata.renderFlagMetadata(writer, profile, flag, is_global, continuation_pad, enum_name);
+    if (mode == .full) {
+        const enum_name = if (flag.default_value) |dv| switch (dv) {
+            .enum_tag => |ordinal| enumTagName(flag, ordinal),
+            else => "",
+        } else "";
+        try HelpMetadata.renderFlagMetadata(writer, profile, flag, is_global, continuation_pad, enum_name);
+    }
 
     // In full-help mode, render long prose indented below the row.
     if (mode == .full and flag.description.len > 0) {
