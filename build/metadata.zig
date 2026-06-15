@@ -37,6 +37,7 @@ pub fn manifestVersion(b: *std.Build) ?[]const u8 {
     return if (manifest.version.len > 0) b.dupe(manifest.version) else null;
 }
 
+// TODO: Parsing the description field from the manifest is just proposed, but overall, it's also planned yet not implemented to strictly ignore and not allow (throwing compile errors) custom fields in the manifest, and currently description isn't accepted. See <https://github.com/ziglang/zig/issues/23816> for the proposal which includes a description field, and <https://github.com/ziglang/zig/issues/25073> and <https://ziggit.dev/t/adding-a-field-to-build-zig-build-zig-zon-for-the-zig-compiler-version-and-commit-used-to-init-the-project/7413> for the discussion on ignoring custom/unknown fields.
 pub fn manifestDescription(b: *std.Build) ?[]const u8 {
     const manifest = manifestMetadata(b) orelse return null;
     defer std.zon.parse.free(b.allocator, manifest);
