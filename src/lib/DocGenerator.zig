@@ -37,7 +37,6 @@ pub fn generateDocs(
     root: *const Command,
     options: Options,
 ) !void {
-    _ = options.include_hidden;
     try std.Io.Dir.cwd().createDirPath(io, options.output_dir);
 
     const doc = try renderSingleFile(
@@ -112,7 +111,7 @@ fn buildDocumentModel(
         commands.deinit(allocator);
     }
 
-    try collectCommandDoc(allocator, root, &commands);
+    try collectCommandDoc(allocator, root, &commands, options.include_hidden);
     try appendHelpCommandDoc(allocator, root, &commands);
 
     const commands_flat = try commands.toOwnedSlice(allocator);
@@ -141,6 +140,10 @@ fn buildDocumentModel(
     else
         &.{};
 
+    const root_doc = if (commands_flat.len > 0) commands_flat[0] else CommandDoc.empty();
+    const root_has_user_options = root_doc.has_user_options;
+    const root_options_heading: []const u8 = if (root_has_user_options) "Global options" else "Options";
+
     return .{
         .binary_name = root.name,
         .display_name = display_name,
@@ -159,7 +162,9 @@ fn buildDocumentModel(
         .toc = options.toc_position.toString(),
         .app_examples = try buildExamples(allocator, root.examples orelse &.{}),
         .help_command_anchor = help_command_anchor,
-        .root = if (commands_flat.len > 0) commands_flat[0] else CommandDoc.empty(),
+        .root_options_heading = root_options_heading,
+        .root_has_user_options = root_has_user_options,
+        .root = root_doc,
         .subcommand_reference = subcommand_reference,
         .commands_flat = commands_flat,
     };
@@ -179,11 +184,19 @@ fn collectCommandDoc(
     allocator: std.mem.Allocator,
     cmd: *const Command,
     commands: *std.ArrayList(CommandDoc),
+    include_hidden: bool,
 ) !void {
-    const doc = try commandDocFromCommand(allocator, cmd);
+    if (cmd.hidden and !include_hidden) {
+        // Still walk children in case a visible command is nested under a hidden parent.
+        for (cmd.subcommands.items) |sub| {
+            try collectCommandDoc(allocator, sub, commands, include_hidden);
+        }
+        return;
+    }
+    const doc = try commandDocFromCommand(allocator, cmd, include_hidden);
     try commands.append(allocator, doc);
     for (cmd.subcommands.items) |sub| {
-        try collectCommandDoc(allocator, sub, commands);
+        try collectCommandDoc(allocator, sub, commands, include_hidden);
     }
 }
 
@@ -223,6 +236,7 @@ fn appendHelpCommandDoc(
         .has_positionals = false,
         .options = &.{},
         .has_options = false,
+        .has_user_options = false,
         .subcommands = &.{},
         .has_subcommands = false,
     });
@@ -243,7 +257,7 @@ pub fn registerDocsCommand(comptime binary_name: []const u8, root: *Command) !vo
         .name = "output-dir",
         .short = 'o',
         .brief = "Output directory where the AsciiDoc documentation is written.",
-        .default = "docs",
+        .default = "zig-out/docs",
     });
 
     try docs.addFlag([]const u8, .{
@@ -262,7 +276,7 @@ pub fn registerDocsCommand(comptime binary_name: []const u8, root: *Command) !vo
 }
 
 fn runDocsCommand(ctx: *ParseContext) !void {
-    const output_dir = ctx.stringFlag("output-dir") orelse "docs";
+    const output_dir = ctx.stringFlag("output-dir") orelse "zig-out/docs";
     var file_owned: ?[]u8 = null;
     defer if (file_owned) |buf| ctx.allocator.free(buf);
     const file = ctx.stringFlag("file") orelse blk: {
@@ -290,7 +304,7 @@ fn writeFile(io: std.Io, path: []const u8, content: []const u8, overwrite: bool)
     try file.writeStreamingAll(io, content);
 }
 
-fn commandDocFromCommand(allocator: std.mem.Allocator, cmd: *const Command) !CommandDoc {
+fn commandDocFromCommand(allocator: std.mem.Allocator, cmd: *const Command, include_hidden: bool) !CommandDoc {
     var chain = try cmd.collectAncestorPath(allocator);
     defer chain.deinit(allocator);
 
@@ -307,12 +321,12 @@ fn commandDocFromCommand(allocator: std.mem.Allocator, cmd: *const Command) !Com
         for (positionals) |*pos| pos.deinit(allocator);
         allocator.free(positionals);
     }
-    const options = try buildOptions(allocator, cmd);
+    const options = try buildOptions(allocator, cmd, include_hidden);
     errdefer {
         for (options) |*flag| flag.deinit(allocator);
         allocator.free(options);
     }
-    const subcommands = try buildSubcommands(allocator, cmd);
+    const subcommands = try buildSubcommands(allocator, cmd, include_hidden);
     errdefer {
         for (subcommands) |*sub| sub.deinit(allocator);
         allocator.free(subcommands);
@@ -327,6 +341,11 @@ fn commandDocFromCommand(allocator: std.mem.Allocator, cmd: *const Command) !Com
         errdefer allocator.free(parent_display_path);
         parent_anchor = try anchorForDisplayPath(allocator, parent_display_path);
         errdefer allocator.free(parent_anchor);
+    }
+
+    var user_options: usize = 0;
+    for (options) |opt| {
+        if (!opt.is_builtin) user_options += 1;
     }
 
     return .{
@@ -345,6 +364,7 @@ fn commandDocFromCommand(allocator: std.mem.Allocator, cmd: *const Command) !Com
         .has_positionals = positionals.len > 0,
         .options = options,
         .has_options = options.len > 0,
+        .has_user_options = user_options > 0,
         .subcommands = subcommands,
         .has_subcommands = subcommands.len > 0,
     };
@@ -420,7 +440,7 @@ fn buildPositionals(allocator: std.mem.Allocator, cmd: *const Command) ![]Positi
     return items;
 }
 
-fn buildOptions(allocator: std.mem.Allocator, cmd: *const Command) ![]FlagDoc {
+fn buildOptions(allocator: std.mem.Allocator, cmd: *const Command, include_hidden: bool) ![]FlagDoc {
     var out = try std.ArrayList(FlagDoc).initCapacity(allocator, cmd.flags.len + 2);
     errdefer {
         for (out.items) |*flag| flag.deinit(allocator);
@@ -433,6 +453,7 @@ fn buildOptions(allocator: std.mem.Allocator, cmd: *const Command) ![]FlagDoc {
     for (chain.items) |ancestor| {
         for (ancestor.flags.constSlice()) |flag| {
             if (ancestor != cmd and !flag.persistent) continue;
+            if (flag.hidden and !include_hidden) continue;
             try out.append(allocator, try flagDocFromFlag(allocator, flag, if (ancestor == cmd) "local" else "global", false));
         }
     }
@@ -561,13 +582,20 @@ fn defaultValueString(allocator: std.mem.Allocator, flag: Command.Flag) ![]const
     };
 }
 
-fn buildSubcommands(allocator: std.mem.Allocator, cmd: *const Command) ![]SubcommandDoc {
-    const count = cmd.subcommands.items.len + if (cmd.parent == null) @as(usize, 1) else 0;
+fn buildSubcommands(allocator: std.mem.Allocator, cmd: *const Command, include_hidden: bool) ![]SubcommandDoc {
+    var count: usize = 0;
+    for (cmd.subcommands.items) |sub| {
+        if (sub.hidden and !include_hidden) continue;
+        count += 1;
+    }
+    if (cmd.parent == null) count += 1;
+
     var items = try allocator.alloc(SubcommandDoc, count);
     errdefer allocator.free(items);
 
     var i: usize = 0;
     for (cmd.subcommands.items) |sub| {
+        if (sub.hidden and !include_hidden) continue;
         items[i] = try subcommandDocFromCommand(allocator, sub);
         i += 1;
     }

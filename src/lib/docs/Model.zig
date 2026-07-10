@@ -22,6 +22,10 @@ toc: []const u8,
 app_examples: []Example,
 /// AsciiDoc anchor for `doc help` (xref target).
 help_command_anchor: []const u8,
+/// Section heading for root options (`Options` or `Global options`).
+root_options_heading: []const u8,
+/// True when the root command has any non-built-in options.
+root_has_user_options: bool,
 root: CommandDoc,
 /// Subcommands and `help` — excludes the root entry; used for the reference section without duplicating root.
 subcommand_reference: []const CommandDoc,

@@ -20,6 +20,8 @@ positionals: []Positional,
 has_positionals: bool,
 options: []Flag,
 has_options: bool,
+/// True when at least one option is not a built-in (`-h` / `-V`).
+has_user_options: bool,
 subcommands: []Subcommand,
 has_subcommands: bool,
 
@@ -40,6 +42,7 @@ pub fn empty() Command {
         .has_positionals = false,
         .options = &.{},
         .has_options = false,
+        .has_user_options = false,
         .subcommands = &.{},
         .has_subcommands = false,
     };

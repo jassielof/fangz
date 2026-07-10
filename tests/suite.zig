@@ -432,9 +432,13 @@ test "doc generator uses valid asciidoc section levels and root xref anchor" {
     const io = testing.io;
 
     const root = app.root();
-    _ = try root.addSubcommand(.{
+    const run = try root.addSubcommand(.{
         .name = "run",
         .brief = "Run the app",
+    });
+    try run.addFlag(bool, .{
+        .name = "dry-run",
+        .brief = "Do not apply changes",
     });
     try root.addFlag([]const fangz.KeyValuePair, .{
         .name = "rule",
@@ -462,6 +466,8 @@ test "doc generator uses valid asciidoc section levels and root xref anchor" {
     try testing.expect(std.mem.indexOf(u8, doc, "===== Options") == null);
     try testing.expect(std.mem.indexOf(u8, doc, "==== Options") != null);
     try testing.expect(std.mem.indexOf(u8, doc, "xref:cmd-fangz[`fangz`]") != null);
+    // Built-ins appear once at root; nested Options omit -h/--help.
+    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, doc, "* xref:cmd-fangz-help[`fangz help`]"));
 }
 
 test "app docs include configured author and revision metadata" {
@@ -491,7 +497,7 @@ test "app docs include configured author and revision metadata" {
 
     try testing.expect(std.mem.indexOf(u8, doc, "= Git: Distributed Version Control") != null);
     try testing.expect(std.mem.indexOf(u8, doc, "Ada Lovelace <ada@example.com>") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, "v1.2.3, 2026-05-01: main (abc1234)") != null);
+    try testing.expect(std.mem.indexOf(u8, doc, "v1.2.3, 2026-05-01 -- main (abc1234)") != null);
 }
 
 fn readFileAlloc(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {

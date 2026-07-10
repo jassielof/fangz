@@ -136,6 +136,8 @@ pub const Flag = struct {
     key_value_help: ?*const KeyValueHelp = null,
     /// Examples for this flag (long help / docs).
     examples: ?[]const CliExample = null,
+    /// When true, omit from generated docs unless `include_hidden` is set.
+    hidden: bool = false,
 
     /// Returns whether the flag expects a value token.
     pub fn takesValue(self: Flag) bool {
@@ -219,6 +221,8 @@ pub fn FlagOptions(comptime T: type) type {
         value_metavar: ?[]const u8 = null,
         key_value_help: ?*const KeyValueHelp = null,
         examples: ?[]const CliExample = null,
+        /// When true, omit from generated docs unless `include_hidden` is set.
+        hidden: bool = false,
     };
 }
 
@@ -374,6 +378,8 @@ usage_override: ?[]const u8 = null,
 usage_override_owned: bool = false,
 /// Root-level CLI examples (AsciiDoc / long help).
 examples: ?[]const CliExample = null,
+/// When true, omit from generated docs unless `include_hidden` is set.
+hidden: bool = false,
 /// Set by freeze(). Prevents further structural mutations.
 frozen: bool = false,
 
@@ -396,6 +402,7 @@ pub fn init(allocator: Allocator, cfg: InitOptions) !Command {
         .git_commit = cfg.git_commit,
         .source_date = cfg.source_date,
         .group_id = cfg.group_id,
+        .hidden = cfg.hidden,
         .aliases = try std.ArrayList([]const u8).initCapacity(allocator, 2),
         .groups = try std.ArrayList(Group).initCapacity(allocator, 2),
         .flags = .{},
@@ -481,6 +488,7 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
         .value_metavar = opts.value_metavar,
         .key_value_help = opts.key_value_help,
         .examples = opts.examples,
+        .hidden = opts.hidden,
     };
 
     if (value_type == .enum_tag) {
