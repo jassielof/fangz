@@ -16,19 +16,16 @@ pub fn build(b: *std.Build) void {
     const mod = b.addModule(
         mod_name,
         .{
-            .root_source_file = b.path("src/lib/root.zig"),
+            .root_source_file = b.path("lib/fangz/root.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{
-                .{
-                    .name = "carnaval",
-                    .module = carnaval,
-                },
-                .{
-                    .name = "trama",
-                    .module = trama,
-                },
-            },
+            .imports = &.{ .{
+                .name = "carnaval",
+                .module = carnaval,
+            }, .{
+                .name = "trama",
+                .module = trama,
+            } },
         },
     );
 
@@ -92,7 +89,7 @@ pub fn build(b: *std.Build) void {
     const fmt = b.addFmt(.{
         .check = true,
         .paths = &.{
-            "src/",
+            "lib/",
         },
     });
     check_step.dependOn(&fmt.step);
