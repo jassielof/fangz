@@ -13,3 +13,9 @@
 [submodule "modules/trama"]
 	path = modules/trama
 	url = https://github.com/jassielof/trama
+[submodule "dependencies/carnaval"]
+	path = dependencies/carnaval
+	url = https://github.com/jassielof/carnaval
+[submodule "dependencies/trama"]
+	path = dependencies/trama
+	url = https://github.com/jassielof/trama
