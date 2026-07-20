@@ -31,7 +31,7 @@ pub fn renderPositionalMetadata(
     continuation_pad: usize,
 ) !void {
     if (arg.variadic) {
-        try renderTagLine(writer, profile, continuation_pad, &.{ "Accepts multiple values" });
+        try renderTagLine(writer, profile, continuation_pad, &.{"Accepts multiple values"});
     }
 
     if (arg.allowed_values) |values| {
