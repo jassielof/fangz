@@ -5,16 +5,20 @@ const metadata = @import("build/metadata.zig");
 pub const injectMetadata = metadata.injectMetadata;
 
 pub fn build(b: *std.Build) void {
-    const mod_name = "fangz";
-
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const carnaval = b.dependency("carnaval", .{}).module("carnaval");
-    const trama = b.dependency("trama", .{}).module("trama");
+    const carnaval = b.dependency("carnaval", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("carnaval");
+    const trama = b.dependency("trama", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("trama");
 
-    const mod = b.addModule(
-        mod_name,
+    const fangz_mod = b.addModule(
+        "fangz",
         .{
             .root_source_file = b.path("lib/fangz/root.zig"),
             .target = target,
@@ -32,7 +36,7 @@ pub fn build(b: *std.Build) void {
     // Provide default fangz_meta so the library compiles standalone (e.g. for fangz's own test suite). Consumers who call injectMeta() will overwrite this with their own values.
     const default_meta = b.addOptions();
 
-    default_meta.addOption([]const u8, "name", mod_name);
+    default_meta.addOption([]const u8, "name", "fangz");
     default_meta.addOption([]const u8, "version", metadata.manifestVersion(b) orelse "");
     default_meta.addOption([]const u8, "brief", metadata.manifestDescription(b) orelse "");
     default_meta.addOption([]const u8, "author_name", "");
@@ -41,33 +45,34 @@ pub fn build(b: *std.Build) void {
     default_meta.addOption([]const u8, "branch", "");
     default_meta.addOption([]const u8, "source_date", metadata.sourceDate(b));
 
-    mod.addOptions("fangz_meta", default_meta);
+    fangz_mod.addOptions("fangz_meta", default_meta);
 
     const docs_step = b.step("docs", "Generate the documentation");
 
-    const mod_lib = b.addLibrary(.{
-        .name = mod_name,
-        .root_module = mod,
+    const fangz_lib = b.addLibrary(.{
+        .name = "fangz",
+        .root_module = fangz_mod,
     });
 
-    const docs = b.addInstallDirectory(.{
-        .source_dir = mod_lib.getEmittedDocs(),
-        .install_dir = .prefix,
-        .install_subdir = "docs",
+    const fangz_docs = b.addInstallDirectory(.{
+        .source_dir = fangz_lib.getEmittedDocs(),
+        .install_dir = .{ .custom = "docs" },
+        .install_subdir = "fangz",
     });
 
-    docs_step.dependOn(&docs.step);
+    docs_step.dependOn(&fangz_docs.step);
 
     const test_step = b.step("test", "Run the test suite");
 
-    const unit_tests = b.addTest(.{
-        .name = "Unit",
-        .root_module = mod,
+    const fangz_lib_tests = b.addTest(.{
+        .name = "Fangz",
+        .root_module = fangz_mod,
     });
 
-    const run_unit_tests = b.addRunArtifact(unit_tests);
-    test_step.dependOn(&run_unit_tests.step);
+    const run_fangz_lib_tests = b.addRunArtifact(fangz_lib_tests);
+    test_step.dependOn(&run_fangz_lib_tests.step);
 
+    // TODO: Add shell completion tests, which will depend on the platform, for Windows, it'll be only Nushell and PowerShell, for Linux, it'll be all supported shells, same for MacOS.
     const integration_tests = b.addTest(.{
         .name = "Integration",
         .root_module = b.createModule(.{
@@ -75,8 +80,8 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{.{
-                .name = mod_name,
-                .module = mod,
+                .name = "fangz",
+                .module = fangz_mod,
             }},
         }),
     });
@@ -88,9 +93,7 @@ pub fn build(b: *std.Build) void {
 
     const fmt = b.addFmt(.{
         .check = true,
-        .paths = &.{
-            "lib/",
-        },
+        .paths = &.{"lib/"},
     });
     check_step.dependOn(&fmt.step);
 }

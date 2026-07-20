@@ -8,6 +8,7 @@
         .trama = .{ .path = "dependencies/trama" },
     },
     .paths = .{
+        "build",
         "build.zig",
         "build.zig.zon",
         "lib",
