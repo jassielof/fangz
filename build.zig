@@ -72,7 +72,6 @@ pub fn build(b: *std.Build) void {
     const run_fangz_lib_tests = b.addRunArtifact(fangz_lib_tests);
     test_step.dependOn(&run_fangz_lib_tests.step);
 
-    // TODO: Add shell completion tests, which will depend on the platform, for Windows, it'll be only Nushell and PowerShell, for Linux, it'll be all supported shells, same for MacOS.
     const integration_tests = b.addTest(.{
         .name = "Integration",
         .root_module = b.createModule(.{
