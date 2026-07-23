@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const git = @import("build/git.zig");
 const metadata = @import("build/metadata.zig");
 pub const injectMetadata = metadata.injectMetadata;
 
