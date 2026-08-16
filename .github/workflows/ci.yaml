@@ -101,7 +101,7 @@ jobs:
         run: source zig-out/completions/fangz.bash
       - name: Load Zsh completion
         if: matrix.shell == 'zsh'
-        run: zsh -fc 'autoload -Uz compinit && compinit && source zig-out/completions/fangz.zsh'
+        run: zsh -fc 'function compdef { :; }; source zig-out/completions/fangz.zsh'
       - name: Load Fish completion
         if: matrix.shell == 'fish'
         run: fish -c 'source zig-out/completions/fangz.fish'
