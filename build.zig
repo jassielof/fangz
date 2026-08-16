@@ -87,11 +87,52 @@ pub fn build(b: *std.Build) void {
     const run_integration_tests = b.addRunArtifact(integration_tests);
     test_step.dependOn(&run_integration_tests.step);
 
+    const e2e_step = b.step("e2e", "Build the end-to-end sample application");
+
+    const e2e_app = b.addExecutable(.{
+        .name = "fangz",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("e2e/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{
+                .name = "fangz",
+                .module = fangz_mod,
+            }},
+        }),
+    });
+    const install_e2e_app = b.addInstallArtifact(e2e_app, .{});
+    e2e_step.dependOn(&install_e2e_app.step);
+
+    const e2e_completions_step = b.step("e2e-completions", "Generate completions for the end-to-end sample application");
+    const completion_shells: []const []const u8 = switch (target.result.os.tag) {
+        .linux => &.{ "bash", "zsh", "fish", "nu", "pwsh" },
+        .windows => &.{ "nu", "pwsh" },
+        else => &.{},
+    };
+
+    for (completion_shells) |shell| {
+        const generate_completion = b.addRunArtifact(e2e_app);
+        generate_completion.addArgs(&.{ "completion", shell });
+        const completion = generate_completion.captureStdOut(.{
+            .basename = b.fmt("fangz.{s}", .{completionExtension(shell)}),
+        });
+        const install_completion = b.addInstallFile(
+            completion,
+            b.fmt("completions/fangz.{s}", .{completionExtension(shell)}),
+        );
+        e2e_completions_step.dependOn(&install_completion.step);
+    }
+
     const check_step = b.step("check", "Run code quality checks");
 
     const fmt = b.addFmt(.{
         .check = true,
-        .paths = &.{"lib/"},
+        .paths = &.{ "e2e/", "lib/" },
     });
     check_step.dependOn(&fmt.step);
+}
+
+fn completionExtension(shell: []const u8) []const u8 {
+    return if (std.mem.eql(u8, shell, "pwsh")) "ps1" else shell;
 }
