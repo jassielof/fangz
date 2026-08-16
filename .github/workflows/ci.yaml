@@ -54,6 +54,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           submodules: recursive
+      # TODO: Test matrix to test shell completions correct load
       - name: Set up Nushell
         uses: hustcer/setup-nu@v3
       - name: Set up Zig
