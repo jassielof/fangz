@@ -133,8 +133,7 @@ jobs:
         run: fish -c 'source zig-out/completions/fangz.fish'
       - name: Load Nushell completion
         if: matrix.shell == 'nu'
-        shell: nu {0}
-        run: source zig-out/completions/fangz.nu
+        run: nu --commands 'source zig-out/completions/fangz.nu'
       - name: Load PowerShell completion
         if: matrix.shell == 'pwsh'
         shell: pwsh
