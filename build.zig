@@ -102,13 +102,17 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const install_e2e_app = b.addInstallArtifact(e2e_app, .{});
+
     e2e_step.dependOn(&install_e2e_app.step);
+    const run_e2e = b.addRunArtifact(e2e_app);
+    e2e_step.dependOn(&run_e2e.step);
+
+    if (b.args) |args| run_e2e.addArgs(args);
 
     const e2e_completions_step = b.step("e2e-completions", "Generate completions for the end-to-end sample application");
     const completion_shells: []const []const u8 = switch (target.result.os.tag) {
-        .linux => &.{ "bash", "zsh", "fish", "nu", "pwsh" },
         .windows => &.{ "nu", "pwsh" },
-        else => &.{},
+        else => &.{ "bash", "zsh", "fish", "nu", "pwsh" },
     };
 
     for (completion_shells) |shell| {
@@ -123,6 +127,11 @@ pub fn build(b: *std.Build) void {
         );
         e2e_completions_step.dependOn(&install_completion.step);
     }
+
+    const e2e_docs_step = b.step("e2e-docs", "Generate docs for the end-to-end sample application");
+    const generate_e2e_docs = b.addRunArtifact(e2e_app);
+    generate_e2e_docs.addArgs(&.{ "docs" });
+    e2e_docs_step.dependOn(&generate_e2e_docs.step);
 
     const check_step = b.step("check", "Run code quality checks");
 

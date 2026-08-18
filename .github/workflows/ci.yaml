@@ -15,7 +15,7 @@ permissions:
 jobs:
   quality:
     name: Code quality checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     continue-on-error: true
     steps:
       - name: Checkout
@@ -28,7 +28,7 @@ jobs:
         run: zig build check --summary all
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -60,22 +60,39 @@ jobs:
         uses: jassielof/setup-zig@main
       - name: Run tests
         run: zig build test --summary all
-  completions:
+  test-doc-gen:
+    name: Test documentation generation
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Set up Zig
+        uses: jassielof/setup-zig@main
+      - name: Generate documentation
+        run: zig build e2e-docs --summary all
+      - name: Install AsciiDoc
+        run: sudo gem install asciidoctor
+      - name: Build documentation
+        run: asciidoctor zig-out/docs/fangz.adoc
+  test-completions:
     name: Load ${{ matrix.shell }} completion on ${{ matrix.os }}
-    needs: build
+    needs: test
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-slim
             shell: bash
-          - os: ubuntu-latest
+          - os: ubuntu-slim
             shell: zsh
-          - os: ubuntu-latest
+          - os: ubuntu-slim
             shell: fish
-          - os: ubuntu-latest
+          - os: ubuntu-slim
             shell: nu
-          - os: ubuntu-latest
+          - os: ubuntu-slim
             shell: pwsh
           - os: windows-latest
             shell: nu
@@ -88,12 +105,21 @@ jobs:
         with:
           submodules: recursive
       - name: Set up Nushell
+        if: matrix.shell == 'nu'
         uses: hustcer/setup-nu@v3
       - name: Set up Zig
         uses: jassielof/setup-zig@main
-      - name: Install Unix shells
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes fish zsh
+      - name: Install Zsh
+        if: matrix.shell == 'zsh'
+        run: |
+          sudo apt update
+          sudo apt install --yes zsh
+      - name: Install Fish
+        if: matrix.shell == 'fish'
+        run: |
+          sudo add-apt-repository ppa:fish-shell/release-4
+          sudo apt update
+          sudo apt install --yes fish
       - name: Generate end-to-end completion scripts
         run: zig build e2e-completions --summary all
       - name: Load Bash completion
@@ -107,8 +133,8 @@ jobs:
         run: fish -c 'source zig-out/completions/fangz.fish'
       - name: Load Nushell completion
         if: matrix.shell == 'nu'
-        shell: pwsh
-        run: nu -c 'source zig-out/completions/fangz.nu'
+        shell: nu {0}
+        run: source zig-out/completions/fangz.nu
       - name: Load PowerShell completion
         if: matrix.shell == 'pwsh'
         shell: pwsh
