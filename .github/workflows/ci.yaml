@@ -21,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
       - name: Set up Zig
         uses: jassielof/setup-zig@main
       - name: Run code quality checks
@@ -33,7 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
       - name: Set up Zig
         uses: jassielof/setup-zig@main
       - name: Build
@@ -53,7 +53,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
       - name: Set up Nushell
         uses: hustcer/setup-nu@v3
       - name: Set up Zig
@@ -68,7 +68,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
       - name: Set up Zig
         uses: jassielof/setup-zig@main
       - name: Generate documentation
@@ -103,7 +103,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
       - name: Set up Nushell
         if: matrix.shell == 'nu'
         uses: hustcer/setup-nu@v3
@@ -147,7 +147,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
       - name: Set up Zig
         uses: jassielof/setup-zig@main
       - name: Build documentation
