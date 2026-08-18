@@ -1,5 +1,15 @@
 //! Application options and configuration.
 
+/// Selects where an author field's value comes from.
+pub const AuthorSource = union(enum) {
+    /// Use this literal value, bypassing Git-based injection.
+    custom: []const u8,
+    /// Suppress the field entirely (renders as an empty string).
+    none,
+    /// Use the value injected by `injectMeta` from `HEAD`'s Git author (the default).
+    git,
+};
+
 /// Human-friendly name used by generated documentation. Defaults to the injected executable name.
 display_name: ?[]const u8 = null,
 /// Short subtitle rendered after the display name in generated documentation.
@@ -12,12 +22,10 @@ description: []const u8 = "",
 version: ?[]const u8 = null,
 /// Author name used by generated documentation.
 ///
-/// Defaults to the Git author name injected by [`injectMeta`] when null or undefined. Otherwise, if there's no Git author, it'll attempt to fallback to user input, and if no user input is provided, it'll fallback to an empty string.
-///
-/// Pass an empty string to suppress Git-based fallback
-author_name: ?[]const u8 = null,
-/// Author email used by generated documentation. Defaults to the Git author email injected by `injectMeta`.
-author_email: ?[]const u8 = null,
+/// `.git` (the default) uses the Git author name for `HEAD` injected by `injectMeta`, falling back to an empty string when there is no Git author. Pass `.{ .custom = "..." }` to override, or `.none` to suppress the field entirely.
+author_name: AuthorSource = .git,
+/// Author email used by generated documentation. Same resolution rules as `author_name`.
+author_email: AuthorSource = .git,
 /// Source date used by generated documentation. Defaults to the injected Git commit date, falling back to the build date.
 source_date: ?[]const u8 = null,
 /// Short git commit hash. Defaults to the injected value from `injectMeta`.

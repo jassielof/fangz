@@ -58,8 +58,16 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: AppOptions) Error!App
         null;
     const commit = cfg.commit orelse meta.commit;
     const branch = cfg.branch orelse meta.branch;
-    const author_name = cfg.author_name orelse meta.author_name;
-    const author_email = cfg.author_email orelse meta.author_email;
+    const author_name = switch (cfg.author_name) {
+        .custom => |custom_name| custom_name,
+        .none => "",
+        .git => meta.author_name,
+    };
+    const author_email = switch (cfg.author_email) {
+        .custom => |email| email,
+        .none => "",
+        .git => meta.author_email,
+    };
     const source_date = cfg.source_date orelse meta.source_date;
     const brief = if (cfg.brief.len > 0) cfg.brief else meta.brief;
 
