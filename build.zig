@@ -32,9 +32,8 @@ pub fn build(b: *std.Build) void {
         },
     );
 
-    // Provide default fangz_meta so the library compiles standalone (e.g. for fangz's own test suite). Consumers who call injectMeta() will overwrite this with their own values.
+    // Provide default fangz_meta so the library compiles standalone (e.g. for Fangz's own test suite). Consumers who call injectMetadata() overwrite these values with their own metadata.
     const default_meta = b.addOptions();
-
     default_meta.addOption([]const u8, "name", "fangz");
     default_meta.addOption([]const u8, "version", metadata.manifestVersion(b) orelse "");
     default_meta.addOption([]const u8, "brief", metadata.manifestDescription(b) orelse "");
@@ -43,146 +42,98 @@ pub fn build(b: *std.Build) void {
     default_meta.addOption([]const u8, "commit", "");
     default_meta.addOption([]const u8, "branch", "");
     default_meta.addOption([]const u8, "source_date", metadata.sourceDate(b));
-
     fangz_mod.addOptions("fangz_meta", default_meta);
 
     const docs_step = b.step("docs", "Generate the documentation");
-
     const fangz_lib = b.addLibrary(.{
         .name = "fangz",
         .root_module = fangz_mod,
     });
-
     const fangz_docs = b.addInstallDirectory(.{
         .source_dir = fangz_lib.getEmittedDocs(),
         .install_dir = .{ .custom = "docs" },
         .install_subdir = "fangz",
     });
-
     docs_step.dependOn(&fangz_docs.step);
 
     const test_step = b.step("test", "Run the test suite");
-
     const fangz_lib_tests = b.addTest(.{
         .name = "Fangz",
         .root_module = fangz_mod,
     });
+    test_step.dependOn(&b.addRunArtifact(fangz_lib_tests).step);
 
-    const run_fangz_lib_tests = b.addRunArtifact(fangz_lib_tests);
-    test_step.dependOn(&run_fangz_lib_tests.step);
-
-    const integration_tests = b.addTest(.{
-        .name = "Integration",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("tests/suite.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{.{
-                .name = "fangz",
-                .module = fangz_mod,
-            }},
-        }),
+    const fixture_mod = b.createModule(.{
+        .root_source_file = b.path("tests/fixtures.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{
+            .name = "fangz",
+            .module = fangz_mod,
+        }},
     });
 
-    const run_integration_tests = b.addRunArtifact(integration_tests);
-    test_step.dependOn(&run_integration_tests.step);
+    const fixture_tests = b.addTest(.{
+        .name = "Fixture",
+        .root_module = fixture_mod,
+    });
+    test_step.dependOn(&b.addRunArtifact(fixture_tests).step);
 
-    const e2e_step = b.step("e2e", "Build the end-to-end sample application");
-
-    const e2e_app = b.addExecutable(.{
-        .name = "fangz",
+    const ux_tests = b.addTest(.{
+        .name = "UX",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("e2e/main.zig"),
+            .root_source_file = b.path("tests/ux.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{.{
+            .imports = &.{ .{
                 .name = "fangz",
                 .module = fangz_mod,
-            }},
+            }, .{
+                .name = "fixture",
+                .module = fixture_mod,
+            } },
         }),
     });
-    const install_e2e_app = b.addInstallArtifact(e2e_app, .{});
+    test_step.dependOn(&b.addRunArtifact(ux_tests).step);
 
-    e2e_step.dependOn(&install_e2e_app.step);
-    if (b.args) |args| {
-        addE2eScenario(b, e2e_step, e2e_app, args);
-    } else {
-        addE2eScenario(b, e2e_step, e2e_app, &.{});
-        addE2eScenario(b, e2e_step, e2e_app, &.{
-            "project",  "init",            "example",    "--config", "forge.toml", "--label",  "ci",
-            "--define", "FEATURE=enabled", "--template", "service",  "--no-git",   "--module", "api",
-            "--module", "web",
-        });
-        addE2eScenario(b, e2e_step, e2e_app, &.{
-            "projects", "inspect", "example", "--output", "yaml", "--resolved",
-        });
-        addE2eScenario(b, e2e_step, e2e_app, &.{
-            "project", "list", "--tag", "internal", "--tag", "zig", "--limit", "3",
-        });
-        addE2eScenario(b, e2e_step, e2e_app, &.{
-            "release",       "staging",   "api.tar",    "worker.tar",         "--strategy", "canary",
-            "--parallelism", "2",         "--timeout",  "1.5",                "--region",   "us-east",
-            "--no-wait",     "--dry-run", "--variable", "telemetry=disabled", "--variable", "feature=enabled",
-        });
-        addE2eScenario(b, e2e_step, e2e_app, &.{
-            "publish", "release.toml", "--token", "test-token", "--no-signed",
-        });
-        addE2eScenario(b, e2e_step, e2e_app, &.{
-            "logs",    "api",                  "--level", "warn", "--tail", "20", "--follow",
-            "--since", "2026-08-19T00:00:00Z",
-        });
-        addE2eScenario(b, e2e_step, e2e_app, &.{
-            "run", "test", "--offline", "--", "--filter", "slow",
-        });
-        addE2eScenario(b, e2e_step, e2e_app, &.{
-            "cfg", "set", "output", "json",
-        });
-    }
+    const documentation_generation_tests = b.addTest(.{
+        .name = "Documentation Generation",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/docgen.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{ .{
+                .name = "fangz",
+                .module = fangz_mod,
+            }, .{
+                .name = "fixture",
+                .module = fixture_mod,
+            } },
+        }),
+    });
+    test_step.dependOn(&b.addRunArtifact(documentation_generation_tests).step);
 
-    const e2e_completions_step = b.step("e2e-completions", "Generate completions for the end-to-end sample application");
-    const completion_shells: []const []const u8 = switch (target.result.os.tag) {
-        .windows => &.{ "nu", "pwsh" },
-        else => &.{ "bash", "zsh", "fish", "nu", "pwsh" },
-    };
-
-    for (completion_shells) |shell| {
-        const generate_completion = b.addRunArtifact(e2e_app);
-        generate_completion.addArgs(&.{ "completion", shell });
-        const completion = generate_completion.captureStdOut(.{
-            .basename = b.fmt("fangz.{s}", .{completionExtension(shell)}),
-        });
-        const install_completion = b.addInstallFile(
-            completion,
-            b.fmt("completions/fangz.{s}", .{completionExtension(shell)}),
-        );
-        e2e_completions_step.dependOn(&install_completion.step);
-    }
-
-    const e2e_docs_step = b.step("e2e-docs", "Generate docs for the end-to-end sample application");
-    const generate_e2e_docs = b.addRunArtifact(e2e_app);
-    generate_e2e_docs.addArgs(&.{"docs"});
-    e2e_docs_step.dependOn(&generate_e2e_docs.step);
+    const shell_completion_tests = b.addTest(.{
+        .name = "Shell Completion",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/completion.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{ .{
+                .name = "fangz",
+                .module = fangz_mod,
+            }, .{
+                .name = "fixture",
+                .module = fixture_mod,
+            } },
+        }),
+    });
+    test_step.dependOn(&b.addRunArtifact(shell_completion_tests).step);
 
     const check_step = b.step("check", "Run code quality checks");
-
     const fmt = b.addFmt(.{
         .check = true,
-        .paths = &.{ "e2e/", "lib/" },
+        .paths = &.{"lib/"},
     });
     check_step.dependOn(&fmt.step);
-}
-
-fn completionExtension(shell: []const u8) []const u8 {
-    return if (std.mem.eql(u8, shell, "pwsh")) "ps1" else shell;
-}
-
-fn addE2eScenario(
-    b: *std.Build,
-    e2e_step: *std.Build.Step,
-    executable: *std.Build.Step.Compile,
-    args: []const []const u8,
-) void {
-    const run = b.addRunArtifact(executable);
-    run.addArgs(args);
-    e2e_step.dependOn(&run.step);
 }

@@ -39,6 +39,8 @@ allocator: std.mem.Allocator,
 io: std.Io,
 command: *Command,
 flags: std.StringHashMap(FlagValue),
+/// Flag names explicitly present in argv, excluding values populated from defaults.
+provided_flags: std.StringHashMap(void),
 positionals: std.ArrayList([]const u8),
 raw_positionals_after_terminator: std.ArrayList([]const u8),
 /// Set when the user passes `--help` or `help <cmd>`.  Triggers full help rendering.
@@ -54,6 +56,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, command: *Command) !ParseC
         .io = io,
         .command = command,
         .flags = std.StringHashMap(FlagValue).init(allocator),
+        .provided_flags = std.StringHashMap(void).init(allocator),
         .positionals = try std.ArrayList([]const u8).initCapacity(allocator, 0),
         .raw_positionals_after_terminator = try std.ArrayList([]const u8).initCapacity(allocator, 0),
     };
@@ -67,6 +70,7 @@ pub fn deinit(self: *ParseContext) void {
         value.deinit(self.allocator);
     }
     self.flags.deinit();
+    self.provided_flags.deinit();
     self.positionals.deinit(self.allocator);
     self.raw_positionals_after_terminator.deinit(self.allocator);
 }
@@ -74,6 +78,11 @@ pub fn deinit(self: *ParseContext) void {
 /// Returns whether a flag was parsed and stored.
 pub fn hasFlag(self: *const ParseContext, name: []const u8) bool {
     return self.flags.contains(name);
+}
+
+/// Returns whether argv explicitly supplied a flag, excluding default values.
+pub fn wasFlagProvided(self: *const ParseContext, name: []const u8) bool {
+    return self.provided_flags.contains(name);
 }
 
 /// Gets a parsed boolean flag value.

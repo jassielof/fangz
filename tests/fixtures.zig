@@ -1,4 +1,4 @@
-//! A representative Fangz application used by the end-to-end build targets.
+//! A representative Fangz CLI shared by integration test modules.
 //!
 //! The sample intentionally uses the public command-tree surface broadly so
 //! generated help, documentation, and shell completions have a realistic CLI
@@ -57,8 +57,12 @@ const deploy_variable_help = fangz.KeyValueHelp{
     }},
 };
 
-pub fn main(init: std.process.Init) !void {
-    var app = try fangz.App.init(init.gpa, init.io, .{
+/// Initializes the comprehensive representative command tree used by regression tests.
+///
+/// `App` owns command nodes whose parent pointers reference its root, so callers
+/// must initialize the final storage in place instead of moving a configured app.
+pub fn initialize(app: *fangz.App, allocator: std.mem.Allocator, io: std.Io) !void {
+    app.* = try fangz.App.init(allocator, io, .{
         .display_name = "Fangz Forge",
         .tagline = "A reference CLI for shipping project workspaces.",
         .brief = "Manage projects, releases, and operational tasks.",
@@ -71,8 +75,12 @@ pub fn main(init: std.process.Init) !void {
         .branch = "e2e",
         .commit = "sample",
     });
-    defer app.deinit();
+    errdefer app.deinit();
 
+    try configure(app);
+}
+
+fn configure(app: *fangz.App) !void {
     const root = app.root();
     root.examples = &root_examples;
     root.setHelpOnEmptyArgs(true);
@@ -90,8 +98,6 @@ pub fn main(init: std.process.Init) !void {
     try addDeliveryCommands(root);
     try addOperationalCommands(root);
     try addHiddenCommands(root);
-
-    try app.executeProcess(init.minimal.args);
 }
 
 fn addGlobalFlags(root: *fangz.Command) !void {

@@ -1,18 +1,279 @@
+//! Representative CLI tree for help, parse, and docgen behavior (no consumer-specific wiring).
+
 const std = @import("std");
 const testing = std.testing;
-
 const fangz = @import("fangz");
+const fixture = @import("fixture");
 
-comptime {
-    testing.refAllDecls(@This());
-    testing.refAllDecls(@import("cli_ux.zig"));
+const OutputMode = enum { pretty, text, minimal, json };
+
+const FailFast = enum { none, @"error", warn, any };
+
+test "fixture accepts representative command workflows" {
+    const workflows = [_][]const []const u8{
+        &.{},
+        &.{
+            "project",  "init",            "example",    "--config", "forge.toml", "--label",  "ci",
+            "--define", "FEATURE=enabled", "--template", "service",  "--no-git",   "--module", "api",
+            "--module", "web",
+        },
+        &.{ "projects", "inspect", "example", "--output", "yaml", "--resolved" },
+        &.{ "project", "list", "--tag", "internal", "--tag", "zig", "--limit", "3" },
+        &.{
+            "release",       "staging",   "api.tar",    "worker.tar",         "--strategy", "canary",
+            "--parallelism", "2",         "--timeout",  "1.5",                "--region",   "us-east",
+            "--no-wait",     "--dry-run", "--variable", "telemetry=disabled", "--variable", "feature=enabled",
+        },
+        &.{ "publish", "release.toml", "--token", "test-token", "--no-signed" },
+        &.{ "logs", "api", "--level", "warn", "--tail", "20", "--follow", "--since", "2026-08-19T00:00:00Z" },
+        &.{ "run", "test", "--offline", "--", "--filter", "slow" },
+        &.{ "cfg", "set", "output", "json" },
+    };
+
+    for (workflows) |argv| {
+        var app: fangz.App = undefined;
+        try initializeFixtureApp(&app);
+        defer app.deinit();
+        _ = try app.parseFrom(argv);
+    }
 }
 
-fn makeApp() !fangz.App {
-    return fangz.App.init(testing.allocator, testing.io, .{
-        .brief = "test app",
-        .version = "1.2.3",
+test "nested subcommand appears in full help" {
+    var app: fangz.App = undefined;
+    try initializeFixtureApp(&app);
+    defer app.deinit();
+
+    try app.root_command.freeze();
+
+    var buf: [32768]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .full);
+    const text = writer.buffered();
+
+    try testing.expect(std.mem.indexOf(u8, text, "project") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "Create, inspect, and list projects") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "archive") == null);
+}
+
+test "short help omits flags that are not registered" {
+    var app: fangz.App = undefined;
+    try initializeFixtureApp(&app);
+    defer app.deinit();
+
+    try app.root_command.freeze();
+
+    var buf: [8192]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .short);
+    const text = writer.buffered();
+
+    try testing.expect(std.mem.indexOf(u8, text, "<RULE=LEVEL>") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "--rule") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "--all") == null);
+}
+
+test "full help documents optional path flag" {
+    var app: fangz.App = undefined;
+    try initializeFixtureApp(&app);
+    defer app.deinit();
+
+    try app.root_command.freeze();
+
+    var buf: [32768]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .full);
+    const text = writer.buffered();
+
+    try testing.expect(std.mem.indexOf(u8, text, "--config") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "PATH") != null);
+}
+
+test "parse errors on unknown flag" {
+    var app: fangz.App = undefined;
+    try initializeFixtureApp(&app);
+    defer app.deinit();
+
+    try app.root_command.freeze();
+
+    const argv: []const []const u8 = &.{ "--rule", "alpha=deny" };
+    try testing.expectError(error.UnknownFlag, fangz.Parser.parse(testing.allocator, testing.io, app.root(), argv));
+}
+
+test "generated AsciiDoc synopsis omits key-value metavar when flag absent" {
+    var app: fangz.App = undefined;
+    try initializeFixtureApp(&app);
+    defer app.deinit();
+
+    try app.root_command.freeze();
+
+    const out_dir = "zig-out/fangz-cliux-docgen";
+    std.Io.Dir.cwd().deleteTree(testing.io, out_dir) catch {};
+    defer std.Io.Dir.cwd().deleteTree(testing.io, out_dir) catch {};
+
+    try fangz.DocGenerator.generateDocs(testing.allocator, testing.io, app.root(), .{
+        .output_dir = out_dir,
     });
+
+    const path = try std.fs.path.join(testing.allocator, &.{ out_dir, "fangz.adoc" });
+    defer testing.allocator.free(path);
+
+    const content = try readFileAlloc(testing.io, testing.allocator, path);
+    defer testing.allocator.free(content);
+
+    try testing.expect(std.mem.indexOf(u8, content, "== Synopsis") != null);
+    try testing.expect(std.mem.indexOf(u8, content, "RULE=LEVEL") == null);
+    try testing.expect(std.mem.indexOf(u8, content, "== Command Index") == null);
+}
+
+test "help metadata uses distinct variadic and repeatable markers" {
+    var app: fangz.App = undefined;
+    try initializeFixtureApp(&app);
+    defer app.deinit();
+
+    try app.root().addPositional(.{
+        .name = "paths",
+        .brief = "Files or directories to analyze.",
+        .variadic = true,
+    });
+
+    try app.root().addFlag(bool, .{
+        .name = "bins",
+        .brief = "Analyze all binary targets",
+        .default = false,
+    });
+
+    try app.root().addFlag([]const []const u8, .{
+        .name = "bin",
+        .brief = "Analyze specific binary by name",
+        .value_hint = "STRING",
+        .multi = true,
+    });
+
+    try app.root_command.freeze();
+
+    var buf: [32768]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .full);
+    const text = writer.buffered();
+
+    try testing.expect(std.mem.indexOf(u8, text, "<paths>*") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "Accepts multiple values") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "--bin <STRING>...") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "Repeatable") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "[variadic]") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "[default:") == null);
+}
+
+test "short help omits metadata annotations" {
+    var app: fangz.App = undefined;
+    try initializeFixtureApp(&app);
+    defer app.deinit();
+
+    try app.root().addPositional(.{
+        .name = "paths",
+        .brief = "Files or directories to analyze.",
+        .variadic = true,
+    });
+
+    try app.root().addFlag([]const []const u8, .{
+        .name = "bin",
+        .brief = "Analyze specific binary by name",
+        .value_hint = "STRING",
+        .multi = true,
+    });
+
+    try app.root().addFlag(OutputMode, .{
+        .name = "format",
+        .short = 'f',
+        .brief = "Output format",
+        .value_hint = "FORMAT",
+        .default = .pretty,
+        .allowed_values_style = .comma,
+    });
+
+    try app.root_command.freeze();
+
+    var buf: [32768]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .short);
+    const text = writer.buffered();
+
+    try testing.expect(std.mem.indexOf(u8, text, "Accepts multiple values") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "Repeatable") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "Allowed") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "(default)") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "Default:") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "<paths>*") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "--bin") != null);
+}
+
+test "help enum defaults are marked on allowed values" {
+    var app: fangz.App = undefined;
+    try initializeFixtureApp(&app);
+    defer app.deinit();
+
+    try app.root().addFlag(OutputMode, .{
+        .name = "format",
+        .short = 'f',
+        .brief = "Output format",
+        .value_hint = "FORMAT",
+        .default = .pretty,
+        .allowed_values_style = .comma,
+    });
+
+    try app.root().addFlag(FailFast, .{
+        .name = "fail-fast",
+        .short = 'F',
+        .brief = "Stop after the first matching severity",
+        .value_hint = "WHEN",
+        .default = .none,
+    });
+
+    try app.root_command.freeze();
+
+    var buf: [32768]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .full);
+    const text = writer.buffered();
+
+    try testing.expect(std.mem.indexOf(u8, text, "Allowed:") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "pretty (default)") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "[possible:") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "none (default)") != null);
+}
+
+test "full help wraps prose without breaking urls" {
+    var app: fangz.App = undefined;
+    try initializeFixtureApp(&app);
+    defer app.deinit();
+
+    const docs = try app.root().addSubcommand(.{
+        .name = "docs",
+        .brief = "Open documentation",
+        .description = "Read the guide at https://example.com/docs/guide before editing ./config/app.toml.",
+    });
+    try docs.addFlag(bool, .{
+        .name = "verbose",
+        .brief = "Verbose output",
+    });
+    try app.root_command.freeze();
+
+    var buf: [32768]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, docs, .none, .full);
+    const text = writer.buffered();
+
+    try testing.expect(std.mem.indexOf(u8, text, "https://example.com/docs/guide") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "./config/app.toml") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "https://example.com/docs/\n") == null);
+}
+
+fn initializeFixtureApp(app: *fangz.App) !void {
+    try fixture.initialize(app, testing.allocator, testing.io);
+}
+
+fn readFileAlloc(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
 }
 
 test "dispatches nested subcommands with aliases" {
@@ -157,24 +418,6 @@ test "enum flag rejects invalid value" {
     try testing.expectError(error.InvalidEnumValue, app.parseFrom(&.{ "--output", "yaml" }));
 }
 
-test "completion command with no args requests help" {
-    var app = try makeApp();
-    defer app.deinit();
-
-    const ctx = try app.parseFrom(&.{"completion"});
-    try testing.expect(ctx.help_requested);
-    try testing.expectEqualStrings("completion", ctx.command.name);
-}
-
-test "completions alias resolves to completion command" {
-    var app = try makeApp();
-    defer app.deinit();
-
-    const ctx = try app.parseFrom(&.{"completions"});
-    try testing.expect(ctx.help_requested);
-    try testing.expectEqualStrings("completion", ctx.command.name);
-}
-
 test "negatable boolean flag sets to false with --no-flag" {
     var app = try makeApp();
     defer app.deinit();
@@ -276,6 +519,21 @@ test "mutually exclusive flags fail when both are present" {
     try testing.expectError(error.MutuallyExclusiveFlags, app.parseFrom(&.{ "--json", "--yaml" }));
 }
 
+test "mutually exclusive flags ignore default values" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    const root = app.root();
+    try root.addFlag(bool, .{ .name = "dry-run", .default = false });
+    try root.addFlag(bool, .{ .name = "force", .default = false });
+    try root.addMutuallyExclusive(.{ .names = &.{ "dry-run", "force" } });
+
+    const ctx = try app.parseFrom(&.{"--dry-run"});
+    try testing.expect(ctx.wasFlagProvided("dry-run"));
+    try testing.expect(!ctx.wasFlagProvided("force"));
+    try testing.expect(!ctx.boolFlag("force").?);
+}
+
 test "unknown command returns error" {
     var app = try makeApp();
     defer app.deinit();
@@ -300,224 +558,6 @@ test "bundle with attached value on bool flags errors" {
     try app.root().addFlag(bool, .{ .name = "a", .short = 'a' });
     try app.root().addFlag(bool, .{ .name = "b", .short = 'b' });
     try testing.expectError(error.UnexpectedValueForBool, app.parseFrom(&.{"-ab=foo"}));
-}
-
-test "doc generator writes single asciidoc file by default" {
-    var app = try makeApp();
-    defer app.deinit();
-    const io = testing.io;
-
-    const root = app.root();
-    try root.addFlag(bool, .{
-        .name = "verbose",
-        .short = 'v',
-        .persistent = true,
-        .brief = "Verbose output",
-    });
-    const commit = try root.addSubcommand(.{
-        .name = "commit",
-        .brief = "Record changes",
-    });
-    try commit.addFlag([]const u8, .{
-        .name = "message",
-        .short = 'm',
-        .required = true,
-        .brief = "Commit message",
-    });
-
-    const out_dir = "zig-out/docgen-single";
-    std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
-    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
-
-    try fangz.DocGenerator.generateDocs(testing.allocator, io, root, .{
-        .output_dir = out_dir,
-    });
-
-    const path = out_dir ++ "/fangz.adoc";
-    const content = try readFileAlloc(io, testing.allocator, path);
-    defer testing.allocator.free(content);
-
-    try testing.expect(std.mem.indexOf(u8, content, "= fangz") != null);
-    try testing.expect(std.mem.indexOf(u8, content, "== Command Index") == null);
-    try testing.expect(std.mem.indexOf(u8, content, "[#cmd-fangz-commit]") != null);
-    try testing.expect(std.mem.indexOf(u8, content, "--message <STRING>") != null);
-}
-
-test "doc generator renders nested commands as flat reference entries" {
-    var app = try makeApp();
-    defer app.deinit();
-    const io = testing.io;
-
-    const root = app.root();
-    const remote = try root.addSubcommand(.{
-        .name = "remote",
-        .brief = "Manage remotes",
-    });
-    _ = try remote.addSubcommand(.{
-        .name = "add",
-        .brief = "Add a remote",
-    });
-
-    const out_dir = "zig-out/docgen-tree";
-    std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
-    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
-
-    try fangz.DocGenerator.generateDocs(testing.allocator, io, root, .{
-        .output_dir = out_dir,
-    });
-
-    const doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/fangz.adoc");
-    defer testing.allocator.free(doc);
-    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-fangz-remote]") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, "[#cmd-fangz-remote-add]") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, "=== `fangz remote add`") != null);
-}
-
-test "doc generator renders examples as captioned asciidoc example blocks" {
-    var app = try makeApp();
-    defer app.deinit();
-    const io = testing.io;
-
-    app.root().examples = &.{
-        .{ .description = "Show help", .command = "fangz --help" },
-    };
-
-    const out_dir = "zig-out/docgen-examples";
-    std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
-    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
-
-    try fangz.DocGenerator.generateDocs(testing.allocator, io, app.root(), .{
-        .output_dir = out_dir,
-    });
-
-    const doc_raw = try readFileAlloc(io, testing.allocator, out_dir ++ "/fangz.adoc");
-    defer testing.allocator.free(doc_raw);
-    const doc = try std.mem.replaceOwned(u8, testing.allocator, doc_raw, "\r\n", "\n");
-    defer testing.allocator.free(doc);
-
-    try testing.expect(std.mem.indexOf(u8, doc, "== Examples") == null);
-    try testing.expect(std.mem.indexOf(u8, doc, ".Show help\n====\n[source,sh]\n----\nfangz --help\n----\n====") != null);
-}
-
-test "doc generator emits custom example content without an examples section heading" {
-    var app = try makeApp();
-    defer app.deinit();
-    const io = testing.io;
-
-    try app.root().addFlag(bool, .{
-        .name = "verbose",
-        .brief = "Verbose output",
-        .examples = &.{
-            .{
-                .description = "Enable verbose mode",
-                .content =
-                \\NOTE: This is prose, not a shell command.
-                \\+
-                \\[source,sh]
-                \\----
-                \\fangz --verbose
-                \\----
-                ,
-            },
-        },
-    });
-    try app.root_command.freeze();
-
-    const out_dir = "zig-out/docgen-example-content";
-    std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
-    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
-
-    try fangz.DocGenerator.generateDocs(testing.allocator, io, app.root(), .{
-        .output_dir = out_dir,
-    });
-
-    const doc_raw = try readFileAlloc(io, testing.allocator, out_dir ++ "/fangz.adoc");
-    defer testing.allocator.free(doc_raw);
-    const doc = try std.mem.replaceOwned(u8, testing.allocator, doc_raw, "\r\n", "\n");
-    defer testing.allocator.free(doc);
-
-    try testing.expect(std.mem.indexOf(u8, doc, "==== Examples") == null);
-    try testing.expect(std.mem.indexOf(u8, doc, "====== Examples") == null);
-    try testing.expect(std.mem.indexOf(u8, doc, ".Enable verbose mode\n====\nNOTE: This is prose, not a shell command.") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, "fangz --verbose") != null);
-}
-
-test "doc generator uses valid asciidoc section levels and root xref anchor" {
-    var app = try makeApp();
-    defer app.deinit();
-    const io = testing.io;
-
-    const root = app.root();
-    const run = try root.addSubcommand(.{
-        .name = "run",
-        .brief = "Run the app",
-    });
-    try run.addFlag(bool, .{
-        .name = "dry-run",
-        .brief = "Do not apply changes",
-    });
-    try root.addFlag([]const fangz.KeyValuePair, .{
-        .name = "rule",
-        .short = 'r',
-        .allowed_keys = &.{ "alpha" },
-        .allowed_values = &.{ "allow", "deny" },
-        .key_metavar = "RULE",
-        .value_metavar = "LEVEL",
-    });
-
-    const out_dir = "zig-out/docgen-asciidoc";
-    std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
-    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
-
-    try fangz.DocGenerator.generateDocs(testing.allocator, io, root, .{
-        .output_dir = out_dir,
-    });
-
-    const doc = try readFileAlloc(io, testing.allocator, out_dir ++ "/fangz.adoc");
-    defer testing.allocator.free(doc);
-
-    const root_anchor = std.mem.indexOf(u8, doc, "[#cmd-fangz]") orelse return error.TestUnexpectedResult;
-    const synopsis = std.mem.indexOf(u8, doc, "== Synopsis") orelse return error.TestUnexpectedResult;
-    try testing.expect(root_anchor < synopsis);
-    try testing.expect(std.mem.indexOf(u8, doc, "===== Options") == null);
-    try testing.expect(std.mem.indexOf(u8, doc, "==== Options") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, "xref:cmd-fangz[`fangz`]") != null);
-    // Built-ins appear once at root; nested Options omit -h/--help.
-    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, doc, "* xref:cmd-fangz-help[`fangz help`]"));
-}
-
-test "app docs include configured author and revision metadata" {
-    var app = try fangz.App.init(testing.allocator, testing.io, .{
-        .display_name = "Git",
-        .tagline = "Distributed Version Control",
-        .brief = "test app",
-        .version = "1.2.3",
-        .author_name = .{ .custom = "Ada Lovelace" },
-        .author_email = .{ .custom = "ada@example.com" },
-        .commit = "abc1234",
-        .branch = "main",
-        .source_date = "2026-05-01",
-    });
-    defer app.deinit();
-
-    const out_dir = "zig-out/docgen-meta";
-    std.Io.Dir.cwd().deleteTree(testing.io, out_dir) catch {};
-    defer std.Io.Dir.cwd().deleteTree(testing.io, out_dir) catch {};
-
-    try app.generateDocs(.{
-        .output_dir = out_dir,
-    });
-
-    const doc = try readFileAlloc(testing.io, testing.allocator, out_dir ++ "/fangz.adoc");
-    defer testing.allocator.free(doc);
-
-    try testing.expect(std.mem.indexOf(u8, doc, "= Git: Distributed Version Control") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, "Ada Lovelace <ada@example.com>") != null);
-    try testing.expect(std.mem.indexOf(u8, doc, "v1.2.3, 2026-05-01 -- main (abc1234)") != null);
-}
-
-fn readFileAlloc(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
 }
 
 test "key-value list flag parses repeated pairs" {
@@ -635,24 +675,9 @@ test "key-value flag diagnostic for unknown value lists allowed levels" {
     return error.TestExpectedError;
 }
 
-test "generateDocs refuses existing output when overwrite is false" {
-    var app = try makeApp();
-    defer app.deinit();
-
-    const out_dir = "zig-out/fangz-docgen-overwrite-test";
-    std.Io.Dir.cwd().deleteTree(testing.io, out_dir) catch {};
-    defer std.Io.Dir.cwd().deleteTree(testing.io, out_dir) catch {};
-
-    try fangz.DocGenerator.generateDocs(testing.allocator, testing.io, app.root(), .{
-        .output_dir = out_dir,
-        .output_file_name = "cli.adoc",
+fn makeApp() !fangz.App {
+    return fangz.App.init(testing.allocator, testing.io, .{
+        .brief = "test app",
+        .version = "1.2.3",
     });
-
-    const second = fangz.DocGenerator.generateDocs(testing.allocator, testing.io, app.root(), .{
-        .output_dir = out_dir,
-        .output_file_name = "cli.adoc",
-        .overwrite = false,
-    });
-
-    try testing.expectError(error.PathAlreadyExists, second);
 }

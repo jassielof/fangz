@@ -39,7 +39,7 @@ pub fn generateDocs(
 ) !void {
     try std.Io.Dir.cwd().createDirPath(io, options.output_dir);
 
-    const doc = try renderSingleFile(
+    const doc = try renderDocs(
         allocator,
         io,
         root,
@@ -68,7 +68,8 @@ fn defaultOutputFileName(allocator: std.mem.Allocator, binary_name: []const u8) 
     return std.fmt.allocPrint(allocator, "{s}.adoc", .{binary_name});
 }
 
-fn renderSingleFile(
+/// Renders the complete AsciiDoc document without writing it to disk.
+pub fn renderDocs(
     allocator: std.mem.Allocator,
     io: std.Io,
     root: *const Command,

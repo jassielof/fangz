@@ -1,0 +1,1549 @@
+= Fangz Forge: A reference CLI for shipping project workspaces.
+Fangz Contributors <maintainers@example.com>
+v1.0.0, 2026-08-19 -- e2e (sample)
+:toc: auto
+:source-highlighter: highlight.js
+:doctype: book
+
+[abstract]
+--
+Fangz Forge is a realistic sample application used to exercise a full command tree. It models project setup, release workflows, configuration, and runtime inspection.
+--
+
+[#cmd-fangz]
+== Synopsis
+
+[source,sh]
+----
+fangz [OPTIONS] <COMMAND>
+----
+
+.Create a service project with verbose output.
+====
+[source,sh]
+----
+fangz --verbose project init api --template service
+----
+====
+
+.Deploy two artifacts using a canary rollout.
+====
+[source,sh]
+----
+fangz deploy production api.tar worker.tar --strategy canary --parallelism 2
+----
+====
+
+== Global options
+
+=== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `local`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+=== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `local`
+
+=== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `local`
+
+=== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `local`
+
+=== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `local`
+
+=== `-h, --help`
+
+Print help.
+
+*Scope:* `built-in`
+
+=== `-V, --version`
+
+Print version.
+
+*Scope:* `built-in`
+
+
+== Commands
+* xref:cmd-fangz-project[`fangz project`] -- Create, inspect, and list projects.
+* xref:cmd-fangz-deploy[`fangz deploy`] -- Deploy one or more project artifacts.
+* xref:cmd-fangz-publish[`fangz publish`] -- Publish a release manifest.
+* xref:cmd-fangz-logs[`fangz logs`] -- Stream or query service logs.
+* xref:cmd-fangz-run[`fangz run`] -- Run a workspace task with forwarded arguments.
+* xref:cmd-fangz-config[`fangz config`] -- Read and update workspace settings.
+* xref:cmd-fangz-docs[`fangz docs`] -- Generate AsciiDoc documentation for this CLI
+* xref:cmd-fangz-completion[`fangz completion`] -- Generate shell completion scripts
+* xref:cmd-fangz-help[`fangz help`] -- Print this message or the help of the given subcommand(s)
+
+
+== Command reference
+
+[#cmd-fangz-project]
+=== `fangz project`
+
+Create, inspect, and list projects.
+
+Project commands manage local workspace metadata without contacting a deployment environment.
+
+Parent: xref:cmd-fangz[`fangz`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz project [OPTIONS] <COMMAND>
+----
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+
+
+==== Subcommands
+* xref:cmd-fangz-project-init[`fangz project init`] -- Create a new project workspace.
+* xref:cmd-fangz-project-inspect[`fangz project inspect`] -- Show the resolved project configuration.
+* xref:cmd-fangz-project-list[`fangz project list`] -- List projects in the current workspace.
+
+
+[#cmd-fangz-project-init]
+=== `fangz project init`
+
+Create a new project workspace.
+
+Initialize a project directory from a template and optionally prepare Git metadata.
+
+Parent: xref:cmd-fangz-project[`fangz project`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz project init [OPTIONS] <directory>
+----
+
+==== Arguments
+===== `<directory>`
+
+Directory where the project is created.
+
+*Required* when present in the synopsis.
+
+
+
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+===== `-t, --template <VALUE>`
+
+Project template to initialize.
+
+Templates select the initial module layout and recommended command set.
+
+*Default:* `application`
+
+*Possible values:* `application`, `library`, `service`
+
+*Scope:* `local`
+
+
+===== `--[no-]git`
+
+Initialize a Git repository.
+
+Use --no-git when the project will be placed inside an existing repository.
+
+*Default:* `true`
+
+*Scope:* `local`
+
+
+===== `-m, --module <NAME>...`
+
+Add a repeatable starter module.
+
+*Scope:* `local`
+
+
+
+
+[#cmd-fangz-project-inspect]
+=== `fangz project inspect`
+
+Show the resolved project configuration.
+
+Inspect renders the configuration after defaults, files, and command-line overrides are combined.
+
+Parent: xref:cmd-fangz-project[`fangz project`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz project inspect [OPTIONS] <project>
+----
+
+==== Arguments
+===== `<project>`
+
+Project name or path.
+
+*Required* when present in the synopsis.
+
+
+
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+===== `-o, --output <VALUE>`
+
+Select the inspection output format.
+
+*Default:* `text`
+
+*Possible values:* `text`, `json`, `yaml`
+
+*Scope:* `local`
+
+
+===== `--resolved`
+
+Include inherited and defaulted settings.
+
+*Default:* `false`
+
+*Scope:* `local`
+
+
+
+
+[#cmd-fangz-project-list]
+=== `fangz project list`
+
+List projects in the current workspace.
+
+Filter projects by repeatable tags and choose a bounded result set.
+
+Parent: xref:cmd-fangz-project[`fangz project`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz project list [OPTIONS]
+----
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+===== `-t, --tag <TAG>...`
+
+Filter by a repeatable project tag.
+
+*Scope:* `local`
+
+
+===== `--limit <COUNT>`
+
+Maximum number of projects to return.
+
+*Default:* `25`
+
+*Scope:* `local`
+
+
+
+
+[#cmd-fangz-deploy]
+=== `fangz deploy`
+
+Deploy one or more project artifacts.
+
+Deploy uses an explicit environment, rollout strategy, and optional runtime settings.
+
+Parent: xref:cmd-fangz[`fangz`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz deploy [OPTIONS] <environment> <artifacts>...
+----
+
+==== Arguments
+===== `<environment>`
+
+Target environment.
+
+*Required* when present in the synopsis.
+
+*Possible values:* `development`, `staging`, `production`
+
+
+===== `<artifacts>...`
+
+Artifact files to deploy.
+
+*Variadic:* accepts multiple values.
+
+
+
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+===== `-s, --strategy <VALUE>`
+
+Rollout strategy.
+
+Canary and blue-green deployments introduce additional validation before traffic is switched.
+
+*Default:* `rolling`
+
+*Possible values:* `rolling`, `canary`, `blue_green`
+
+*Scope:* `local`
+
+
+===== `-p, --parallelism <COUNT>`
+
+Maximum concurrent deployment workers.
+
+*Default:* `1`
+
+*Scope:* `local`
+
+
+===== `--timeout <SECONDS>`
+
+Per-artifact timeout in seconds.
+
+*Default:* `30`
+
+*Scope:* `local`
+
+
+===== `-r, --region <REGION>`
+
+Optional deployment region.
+
+*Possible values:* `us-east`, `us-west`, `eu-central`, `ap-southeast`
+
+*Scope:* `local`
+
+
+===== `--[no-]wait`
+
+Wait for the rollout to become healthy.
+
+*Default:* `true`
+
+*Scope:* `local`
+
+
+===== `--dry-run`
+
+Plan the rollout without applying it.
+
+*Scope:* `local`
+
+
+===== `--force`
+
+Apply despite an existing active rollout.
+
+*Scope:* `local`
+
+
+===== `-E, --variable <SETTING=STATE>...`
+
+Set a constrained deployment variable.
+
+Variables are validated before the deployment hook executes.
+
+====== Severity levels
+
+[cols="1,4"]
+|===
+| Level | Meaning
+
+| `enabled`
+| Enable the setting.
+
+| `disabled`
+| Disable the setting.
+
+|===
+
+====== Rules and defaults
+
+[cols="2,1,5"]
+|===
+| Rule | Default | Description
+
+| `feature`
+| `disabled`
+| Toggle a named feature for this deployment.
+
+| `telemetry`
+| `enabled`
+| Enable or disable telemetry collection.
+
+| `maintenance`
+| `disabled`
+| Put the service in maintenance mode during rollout.
+
+|===
+
+====== Override behavior
+
+Repeat a key to override an earlier value; the final occurrence wins.
+
+*Scope:* `local`
+
+.Disable telemetry for a canary deployment.
+====
+[source,sh]
+----
+fangz deploy staging --variable telemetry=disabled --strategy canary
+----
+====
+
+
+
+
+[#cmd-fangz-publish]
+=== `fangz publish`
+
+Publish a release manifest.
+
+Publish demonstrates required value flags and command-specific credentials.
+
+Parent: xref:cmd-fangz[`fangz`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz publish [OPTIONS] <manifest>
+----
+
+==== Arguments
+===== `<manifest>`
+
+Release manifest to publish.
+
+*Required* when present in the synopsis.
+
+
+
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+===== `-T, --token <TOKEN>`
+
+Publishing credential.
+
+A token is required even when publishing to a development registry.
+
+*Scope:* `local`
+
+
+===== `--[no-]signed`
+
+Require a signed manifest.
+
+*Default:* `true`
+
+*Scope:* `local`
+
+
+
+
+[#cmd-fangz-logs]
+=== `fangz logs`
+
+Stream or query service logs.
+
+Logs accepts service names and exposes filters commonly used during deployment investigations.
+
+Parent: xref:cmd-fangz[`fangz`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz logs [OPTIONS] <service>
+----
+
+==== Arguments
+===== `<service>`
+
+Service whose logs should be queried.
+
+*Required* when present in the synopsis.
+
+*Possible values:* `api`, `worker`, `web`
+
+
+
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+===== `--level <VALUE>`
+
+Minimum log level to return.
+
+*Default:* `info`
+
+*Possible values:* `trace`, `debug`, `info`, `warn`, `err`
+
+*Scope:* `local`
+
+
+===== `-n, --tail <LINES>`
+
+Number of log entries to show.
+
+*Default:* `100`
+
+*Scope:* `local`
+
+
+===== `-f, --follow`
+
+Continue streaming new log entries.
+
+*Default:* `false`
+
+*Scope:* `local`
+
+
+===== `--since <RFC3339>`
+
+Only return entries newer than a timestamp.
+
+*Scope:* `local`
+
+
+
+
+[#cmd-fangz-run]
+=== `fangz run`
+
+Run a workspace task with forwarded arguments.
+
+Use -- to preserve dash-prefixed arguments for the underlying task runner.
+
+Parent: xref:cmd-fangz[`fangz`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz run [OPTIONS] <TASK> [-- <ARGS>...]
+----
+
+==== Arguments
+===== `<task>`
+
+Task name to execute.
+
+*Required* when present in the synopsis.
+
+*Possible values:* `build`, `test`, `lint`, `package`
+
+
+===== `<args>...`
+
+Arguments forwarded unchanged to the task.
+
+*Variadic:* accepts multiple values.
+
+
+
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+===== `--offline`
+
+Disable network access for the task.
+
+*Default:* `false`
+
+*Scope:* `local`
+
+
+
+
+[#cmd-fangz-config]
+=== `fangz config`
+
+Read and update workspace settings.
+
+Configuration commands model nested command trees with constrained positional completions.
+
+Parent: xref:cmd-fangz[`fangz`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz config [OPTIONS] <COMMAND>
+----
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+
+
+==== Subcommands
+* xref:cmd-fangz-config-get[`fangz config get`] -- Read one workspace setting.
+* xref:cmd-fangz-config-set[`fangz config set`] -- Update one workspace setting.
+
+
+[#cmd-fangz-config-get]
+=== `fangz config get`
+
+Read one workspace setting.
+
+Parent: xref:cmd-fangz-config[`fangz config`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz config get [OPTIONS] <setting>
+----
+
+==== Arguments
+===== `<setting>`
+
+Workspace setting name.
+
+*Required* when present in the synopsis.
+
+*Possible values:* `output`, `region`, `retries`, `telemetry`
+
+
+
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+
+
+[#cmd-fangz-config-set]
+=== `fangz config set`
+
+Update one workspace setting.
+
+Parent: xref:cmd-fangz-config[`fangz config`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz config set [OPTIONS] <setting> <value>
+----
+
+==== Arguments
+===== `<setting>`
+
+Workspace setting name.
+
+*Required* when present in the synopsis.
+
+*Possible values:* `output`, `region`, `retries`, `telemetry`
+
+
+===== `<value>`
+
+New setting value.
+
+*Required* when present in the synopsis.
+
+
+
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+
+
+[#cmd-fangz-docs]
+=== `fangz docs`
+
+Generate AsciiDoc documentation for this CLI
+
+Parent: xref:cmd-fangz[`fangz`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz docs [OPTIONS]
+----
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+===== `-o, --output-dir <STRING>`
+
+Output directory where the AsciiDoc documentation is written.
+
+*Default:* `zig-out/docs`
+
+*Scope:* `local`
+
+
+===== `-f, --file <STRING>`
+
+Output file name.
+
+*Default:* `fangz.adoc`
+
+*Scope:* `local`
+
+
+===== `--template <STRING>`
+
+Optional path to a custom Trama template file (AsciiDoc).
+
+*Scope:* `local`
+
+
+
+
+[#cmd-fangz-completion]
+=== `fangz completion`
+
+Generate shell completion scripts
+
+Parent: xref:cmd-fangz[`fangz`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz completion [OPTIONS] <shell>
+----
+
+==== Arguments
+===== `<shell>`
+
+Target shell.
+
+*Required* when present in the synopsis.
+
+*Possible values:* `bash`, `zsh`, `fish`, `pwsh`, `nu`
+
+
+
+
+==== Options
+===== `-v, --verbose`
+
+Print detailed progress information.
+
+Enable verbose progress messages for every command in the selected command path.
+
+*Default:* `false`
+
+*Scope:* `global`
+
+.Show deployment progress.
+====
+[source,sh]
+----
+fangz --verbose deploy staging
+----
+====
+
+
+===== `--color <VALUE>`
+
+Control terminal color output.
+
+Choose automatic color detection, force color, or disable color entirely.
+
+*Default:* `auto`
+
+*Possible values:* `auto`, `always`, `never`
+
+*Scope:* `global`
+
+
+===== `-c, --config <PATH>`
+
+Load configuration from a specific file.
+
+Override the default project configuration discovery path.
+
+*Scope:* `global`
+
+
+===== `-l, --label <NAME>...`
+
+Attach a repeatable label to the operation.
+
+Labels are free-form and are forwarded to project and deployment integrations.
+
+*Scope:* `global`
+
+
+===== `-D, --define <KEY=VALUE>...`
+
+Set a free-form build definition.
+
+Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
+
+*Scope:* `global`
+
+
+
+
+[#cmd-fangz-help]
+=== `fangz help`
+
+Print this message or the help of the given subcommand(s)
+
+Parent: xref:cmd-fangz[`fangz`]
+
+==== Synopsis
+
+[source,sh]
+----
+fangz help [COMMAND]...
+----
+
+
+
+

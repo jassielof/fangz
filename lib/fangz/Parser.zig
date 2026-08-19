@@ -264,6 +264,8 @@ fn parseFlagValue(
     attached_value: ?[]const u8,
     tokenizer: *Tokenizer,
 ) !void {
+    try ctx.provided_flags.put(flag.name, {});
+
     switch (flag.value_type) {
         .bool => {
             if (attached_value != null) return ParseError.UnexpectedValueForBool;
@@ -373,6 +375,8 @@ fn nextValueToken(tokenizer: *Tokenizer) ?[]const u8 {
 
 /// Inserts or replaces parsed flag value in the context map.
 fn setFlagValue(allocator: std.mem.Allocator, ctx: *ParseContext, flag: Command.Flag, value: ParseContext.FlagValue) !void {
+    try ctx.provided_flags.put(flag.name, {});
+
     if (ctx.flags.getPtr(flag.name)) |existing| {
         existing.deinit(allocator);
         existing.* = value;
@@ -465,7 +469,7 @@ fn validateExclusiveFlags(ctx: *ParseContext) !void {
     for (ctx.command.exclusive_groups.items) |group| {
         var count: usize = 0;
         for (group.names) |name| {
-            if (ctx.flags.contains(name)) count += 1;
+            if (ctx.wasFlagProvided(name)) count += 1;
         }
         if (count > 1) return ParseError.MutuallyExclusiveFlags;
     }
