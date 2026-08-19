@@ -111,6 +111,22 @@ test "typed flags include defaults and required validation" {
     try testing.expectEqualStrings("json", ctx.stringFlag("format").?);
 }
 
+test "extract reads a required string flag" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    try app.root().addFlag([]const u8, .{
+        .name = "token",
+        .required = true,
+    });
+
+    const ctx = try app.parseFrom(&.{ "--token", "secret" });
+    const args = try ctx.extract(struct {
+        token: []const u8,
+    });
+    try testing.expectEqualStrings("secret", args.token);
+}
+
 test "enum flag convenience parses default and explicit values" {
     const Output = enum { json, table };
 

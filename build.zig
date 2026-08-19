@@ -104,10 +104,40 @@ pub fn build(b: *std.Build) void {
     const install_e2e_app = b.addInstallArtifact(e2e_app, .{});
 
     e2e_step.dependOn(&install_e2e_app.step);
-    const run_e2e = b.addRunArtifact(e2e_app);
-    e2e_step.dependOn(&run_e2e.step);
-
-    if (b.args) |args| run_e2e.addArgs(args);
+    if (b.args) |args| {
+        addE2eScenario(b, e2e_step, e2e_app, args);
+    } else {
+        addE2eScenario(b, e2e_step, e2e_app, &.{});
+        addE2eScenario(b, e2e_step, e2e_app, &.{
+            "project",  "init",            "example",    "--config", "forge.toml", "--label",  "ci",
+            "--define", "FEATURE=enabled", "--template", "service",  "--no-git",   "--module", "api",
+            "--module", "web",
+        });
+        addE2eScenario(b, e2e_step, e2e_app, &.{
+            "projects", "inspect", "example", "--output", "yaml", "--resolved",
+        });
+        addE2eScenario(b, e2e_step, e2e_app, &.{
+            "project", "list", "--tag", "internal", "--tag", "zig", "--limit", "3",
+        });
+        addE2eScenario(b, e2e_step, e2e_app, &.{
+            "release",       "staging",   "api.tar",    "worker.tar",         "--strategy", "canary",
+            "--parallelism", "2",         "--timeout",  "1.5",                "--region",   "us-east",
+            "--no-wait",     "--dry-run", "--variable", "telemetry=disabled", "--variable", "feature=enabled",
+        });
+        addE2eScenario(b, e2e_step, e2e_app, &.{
+            "publish", "release.toml", "--token", "test-token", "--no-signed",
+        });
+        addE2eScenario(b, e2e_step, e2e_app, &.{
+            "logs",    "api",                  "--level", "warn", "--tail", "20", "--follow",
+            "--since", "2026-08-19T00:00:00Z",
+        });
+        addE2eScenario(b, e2e_step, e2e_app, &.{
+            "run", "test", "--offline", "--", "--filter", "slow",
+        });
+        addE2eScenario(b, e2e_step, e2e_app, &.{
+            "cfg", "set", "output", "json",
+        });
+    }
 
     const e2e_completions_step = b.step("e2e-completions", "Generate completions for the end-to-end sample application");
     const completion_shells: []const []const u8 = switch (target.result.os.tag) {
@@ -130,7 +160,7 @@ pub fn build(b: *std.Build) void {
 
     const e2e_docs_step = b.step("e2e-docs", "Generate docs for the end-to-end sample application");
     const generate_e2e_docs = b.addRunArtifact(e2e_app);
-    generate_e2e_docs.addArgs(&.{ "docs" });
+    generate_e2e_docs.addArgs(&.{"docs"});
     e2e_docs_step.dependOn(&generate_e2e_docs.step);
 
     const check_step = b.step("check", "Run code quality checks");
@@ -144,4 +174,15 @@ pub fn build(b: *std.Build) void {
 
 fn completionExtension(shell: []const u8) []const u8 {
     return if (std.mem.eql(u8, shell, "pwsh")) "ps1" else shell;
+}
+
+fn addE2eScenario(
+    b: *std.Build,
+    e2e_step: *std.Build.Step,
+    executable: *std.Build.Step.Compile,
+    args: []const []const u8,
+) void {
+    const run = b.addRunArtifact(executable);
+    run.addArgs(args);
+    e2e_step.dependOn(&run.step);
 }

@@ -308,7 +308,7 @@ pub fn extract(self: *const ParseContext, comptime T: type) !T {
         if (!assigned) {
             if (field.defaultValue()) |default_ptr| {
                 @field(out, field.name) = default_ptr;
-            } else if (isOptional(FieldType)) {
+            } else if (comptime isOptional(FieldType)) {
                 @field(out, field.name) = null;
             } else {
                 return error.MissingRequiredFlag;
