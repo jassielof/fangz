@@ -25,6 +25,41 @@ test "shared fixture AsciiDoc matches the expected snapshot" {
     try testing.expect(std.mem.indexOf(u8, current, "\n\n\n") == null);
 }
 
+test "AsciiDoc snapshot renders with an installed AsciiDoc processor" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const name = "fangz.adoc";
+    try tmp.dir.writeFile(testing.io, .{
+        .sub_path = name,
+        .data = @embedFile("snapshots/fangz.adoc"),
+    });
+    const path = try tmp.dir.realPathFileAlloc(testing.io, name, testing.allocator);
+    defer testing.allocator.free(path);
+
+    const processors: []const []const u8 = &.{ "asciidoctor", "asciidoctorj" };
+    for (processors) |processor| {
+        const result = std.process.run(testing.allocator, testing.io, .{
+            .argv = &.{ processor, "--out-file", "-", path },
+        }) catch |err| switch (err) {
+            error.FileNotFound => continue,
+            else => return err,
+        };
+        defer testing.allocator.free(result.stdout);
+        defer testing.allocator.free(result.stderr);
+
+        switch (result.term) {
+            .exited => |code| if (code == 0) return,
+            else => {},
+        }
+
+        std.debug.print("{s} could not render {s}:\n{s}", .{ processor, name, result.stderr });
+        return error.AsciiDocSnapshotDidNotRender;
+    }
+
+    return error.AsciiDocProcessorNotFound;
+}
+
 test "doc generator writes single asciidoc file by default" {
     var app = try makeApp();
     defer app.deinit();

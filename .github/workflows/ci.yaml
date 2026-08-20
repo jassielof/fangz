@@ -63,6 +63,12 @@ jobs:
       - name: Install Fish
         if: runner.os == 'macOS'
         run: brew install fish
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+      - name: Install Asciidoctor
+        run: gem install asciidoctor
       - name: Set up Nushell
         uses: hustcer/setup-nu@v3
       - name: Set up Zig
