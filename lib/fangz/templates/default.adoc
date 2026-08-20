@@ -45,7 +45,7 @@
 
 *Possible values:* `{{ join .possible_values "`, `" }}`
 {{- end }}
-{{ end }}
+{{ end -}}
 {{- end }}
 {{- if root.has_options }}
 == {{ root_options_heading }}
@@ -116,13 +116,8 @@
 {{ @raw .content }}
 ====
 {{- end }}
-{{ end }}
-{{- end }}
-
-== Commands
-{{ range root.subcommands -}}
-* xref:{{ .anchor }}[`{{ @raw .display_path }}`]{{ if .brief }} -- {{ .brief }}{{ end }}
-{{ end }}
+{{ end -}}
+{{- end -}}
 
 == Command reference
 {{ range subcommand_reference }}
@@ -149,26 +144,24 @@ Parent: xref:{{ .parent_anchor }}[`{{ @raw .parent_display_path }}`]
 
 ==== Arguments
 {{ range .positionals -}}
-{{ template "positional" . }}
-{{ end }}
-{{- end }}
+{{ template "positional" . -}}
+{{ end -}}
+{{- end -}}
 {{- if .has_user_options }}
-
 ==== Options
 {{ range .options -}}
 {{- if not .is_builtin -}}
-{{ template "flag" . }}
+{{ template "flag" . -}}
 {{ end -}}
-{{ end }}
-{{- end }}
+{{ end -}}
+{{- end -}}
 {{- if .has_subcommands }}
-
 ==== Subcommands
 {{ range .subcommands -}}
 * xref:{{ .anchor }}[`{{ @raw .display_path }}`]{{ if .brief }} -- {{ .brief }}{{ end }}
-{{ end }}
-{{- end }}
-{{ end }}
+{{ end -}}
+{{- end -}}
+{{ end -}}
 {{/* Shared partials (Go-compatible define/template) */}}
 {{ define "positional" -}}
 ===== `{{ @raw .display }}`
@@ -190,8 +183,7 @@ Parent: xref:{{ .parent_anchor }}[`{{ @raw .parent_display_path }}`]
 
 *Possible values:* `{{ join .possible_values "`, `" }}`
 {{- end }}
-
-{{ end }}
+{{ end -}}
 {{ define "flag" -}}
 ===== `{{ @raw .full_signature }}`
 
@@ -259,5 +251,4 @@ Parent: xref:{{ .parent_anchor }}[`{{ @raw .parent_display_path }}`]
 {{ @raw .content }}
 ====
 {{- end }}
-
-{{ end }}
+{{ end -}}

@@ -21,6 +21,8 @@ test "shared fixture AsciiDoc matches the expected snapshot" {
     defer testing.allocator.free(current);
 
     try testing.expectEqualStrings(@embedFile("snapshots/fangz.adoc"), current);
+    try testing.expect(std.mem.indexOf(u8, current, "== Commands") == null);
+    try testing.expect(std.mem.indexOf(u8, current, "\n\n\n") == null);
 }
 
 test "doc generator writes single asciidoc file by default" {
@@ -204,7 +206,8 @@ test "doc generator uses valid asciidoc section levels and root xref anchor" {
     try testing.expect(std.mem.indexOf(u8, doc, "==== Options") != null);
     try testing.expect(std.mem.indexOf(u8, doc, "xref:cmd-fangz[`fangz`]") != null);
     // Built-ins appear once at root; nested Options omit -h/--help.
-    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, doc, "* xref:cmd-fangz-help[`fangz help`]"));
+    try testing.expect(std.mem.indexOf(u8, doc, "== Commands") == null);
+    try testing.expect(std.mem.indexOf(u8, doc, "* xref:cmd-fangz-help[`fangz help`]") == null);
 }
 
 test "app docs include configured author and revision metadata" {
