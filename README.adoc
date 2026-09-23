@@ -15,28 +15,19 @@ A Fangz application is a tree of commands. The root command represents the appli
 
 === Arguments vs. flagsill
 
-Positional arguments are identified by their position in the command
-line, not by a prefix. In `ls ~/Downloads`, `~/Downloads` is a
-positional argument.
+Positional arguments are identified by their position in the command line, not by a prefix. In `ls ~/Downloads`, `~/Downloads` is a positional argument.
 
-Flags (also called options) are identified by a `-` or `--` prefix. In
-`git commit --message "my message"`, `--message` is a long flag and `-m`
-is its short equivalent. Each flag belongs to the command it is
-registered on and is not visible to sibling or parent commands.
+Flags (also called options) are identified by a `-` or `--` prefix. In `git commit --message "my message"`, `--message` is a long flag and `-m` is its short equivalent. Each flag belongs to the command it is  registered on and is not visible to sibling or parent commands.
 
 == Arguments
 
 === Positional arguments
 
-Positional arguments are matched by their position in the command line,
-in the order they were registered on the command.
+Positional arguments are matched by their position in the command line, in the order they were registered on the command.
 
 === Variadic positionals
 
-A variadic positional collects all remaining unmatched tokens into a
-list. Only one variadic positional may exist per command, and it must be
-the last positional registered. This covers patterns like
-`ls file1 file2 file3`, where the number of values is open-ended.
+A variadic positional collects all remaining unmatched tokens into a  list. Only one variadic positional may exist per command, and it must be  the last positional registered. This covers patterns like `ls file1 file2 file3`, where the number of values is open-ended.
 
 == Flags
 
@@ -275,38 +266,28 @@ directory (default `zig-out/docs`). Pass `--template` to use a custom
 Trama template (Go `text/template`–compatible syntax with AsciiDoc helpers;
 see `modules/trama`).
 
-Commands and flags marked `hidden` are omitted unless documentation is
-generated with `include_hidden` enabled.
+Commands and flags marked `hidden` are omitted unless documentation is  generated with `include_hidden` enabled.
 
 == App metadata
 
 === Name
 
-The application name is inferred from the `.name` tag in `build.zig.zon`
-and can be overridden at initialization.
+The application name is inferred from the `.name` tag in `build.zig.zon` and can be overridden at initialization.
 
 === Version
 
-The version is read from `build.zig.zon` at build time via a build
-injection step. When building inside a Git repository, the branch name
-and short commit hash are appended to the version string. Version is
-exposed as `--version` / `-V` by default.
+The version is read from `build.zig.zon` at build time via a build  injection step. When building inside a Git repository, the branch name  and short commit hash are appended to the version string. Version is  exposed as `--version` / `-V` by default.
 
 === Description
 
-The description is inferred from a `.description` field in
-`build.zig.zon` if present, and can be overridden at initialization.
+// TODO: No, the manifest shouldn't contain non-standard properties.
+The description is inferred from a `.description` field in `build.zig.zon` if present, and can be overridden at initialization.
 
 == Shell completions
 
-Fangz injects a `completion` subcommand into every application.
-Supported shells are Bash, Zsh, Fish, PowerShell, and Nushell. Nushell
-supports both a static completion list and a dynamic completer module
-via a `--dynamic` flag on the completion subcommand.
+Fangz injects a `completion` subcommand into every application. Supported shells are Bash, Zsh, Fish, PowerShell, and Nushell. Nushell  supports both a static completion list and a dynamic completer module  via a `--dynamic` flag on the completion subcommand.
 
-Priority is given to shells that see active use during development.
-Nushell is the current primary. Additional shells beyond this list are
-not planned for first-party support and are open to contributions.
+Priority is given to shells that see active use during development. Nushell is the current primary. Additional shells beyond this list are  not planned for first-party support and are open to contributions.
 
 ____
 *Known issue:* Nushell’s completion engine produces a syntax error on
