@@ -59,6 +59,27 @@ pub const KeyValueParseNote = struct {
 
 threadlocal var last_key_value_note: ?KeyValueParseNote = null;
 
+/// Last rejected allowed-values input (flag or positional), for richer diagnostics.
+const InvalidValueNote = struct {
+    /// Display form of the argument, e.g. `--format` or `<shell>`.
+    label_kind: enum { flag, positional },
+    name: []const u8,
+    value: []const u8,
+    allowed: []const []const u8,
+};
+
+threadlocal var last_invalid_value_note: ?InvalidValueNote = null;
+
+fn setInvalidValueNote(note: InvalidValueNote) void {
+    last_invalid_value_note = note;
+}
+
+fn takeInvalidValueNote() ?InvalidValueNote {
+    const n = last_invalid_value_note;
+    last_invalid_value_note = null;
+    return n;
+}
+
 fn setKeyValueNote(flag_name: []const u8, raw: []const u8) void {
     last_key_value_note = .{ .flag_name = flag_name, .raw = raw };
 }
@@ -75,6 +96,7 @@ pub fn parse(allocator: std.mem.Allocator, io: std.Io, root: *Command, argv: []c
     if (!root.frozen) try root.bindAliases();
 
     last_key_value_note = null;
+    last_invalid_value_note = null;
 
     const dispatch = try walkCommandPath(allocator, root, argv);
     if (dispatch.help_for) |help_cmd| {
@@ -286,6 +308,7 @@ fn parseFlagValue(
                     return;
                 }
             }
+            setInvalidValueNote(.{ .label_kind = .flag, .name = flag.name, .value = value, .allowed = allowed });
             return ParseError.InvalidEnumValue;
         },
         .int => {
@@ -391,6 +414,7 @@ fn validateEnum(flag: Command.Flag, value: []const u8) !void {
     for (allowed) |candidate| {
         if (std.mem.eql(u8, candidate, value)) return;
     }
+    setInvalidValueNote(.{ .label_kind = .flag, .name = flag.name, .value = value, .allowed = allowed });
     return ParseError.InvalidEnumValue;
 }
 
@@ -447,6 +471,20 @@ fn validatePositionals(ctx: *ParseContext) !void {
 
     const has_variadic = defs.len > 0 and defs[defs.len - 1].variadic;
     if (!has_variadic and defs.len > 0 and got > defs.len) return ParseError.TooManyPositionals;
+
+    for (defs, 0..) |pos, i| {
+        const allowed = pos.allowed_values orelse continue;
+        if (i >= got) break;
+        const end = if (pos.variadic) got else i + 1;
+        for (ctx.positionals.items[i..end]) |value| {
+            for (allowed) |candidate| {
+                if (std.mem.eql(u8, candidate, value)) break;
+            } else {
+                setInvalidValueNote(.{ .label_kind = .positional, .name = pos.name, .value = value, .allowed = allowed });
+                return ParseError.InvalidEnumValue;
+            }
+        }
+    }
 }
 
 /// Validates required flags for local and inherited persistent scope.
@@ -491,7 +529,7 @@ pub fn diagnoseError(
         error.TooManyPositionals => makeDiagnostic(allocator, "too many positional arguments", null),
         error.InvalidInt => makeDiagnostic(allocator, "expected int value for flag", null),
         error.InvalidFloat => makeDiagnostic(allocator, "expected float value for flag", null),
-        error.InvalidEnumValue => makeDiagnostic(allocator, "invalid value; expected one of allowed values", null),
+        error.InvalidEnumValue => diagnoseInvalidValue(allocator),
         error.KeyValueMissingEquals,
         error.KeyValueEmptyKey,
         error.KeyValueEmptyValue,
@@ -500,6 +538,31 @@ pub fn diagnoseError(
         => diagnoseKeyValueFlagError(allocator, root, argv, err),
         error.UnexpectedValueForBool => makeDiagnostic(allocator, "boolean flag does not accept a value", null),
         error.MutuallyExclusiveFlags => makeDiagnostic(allocator, "mutually exclusive flags were provided together", null),
+    };
+}
+
+fn diagnoseInvalidValue(allocator: std.mem.Allocator) !Diagnostic {
+    const note = takeInvalidValueNote() orelse
+        return makeDiagnostic(allocator, "invalid value; expected one of allowed values", null);
+
+    const message = switch (note.label_kind) {
+        .flag => try std.fmt.allocPrint(allocator, "invalid value '{s}' for flag '--{s}'", .{ note.value, note.name }),
+        .positional => try std.fmt.allocPrint(allocator, "invalid value '{s}' for argument '<{s}>'", .{ note.value, note.name }),
+    };
+    errdefer allocator.free(message);
+
+    var hint: std.ArrayList(u8) = .empty;
+    errdefer hint.deinit(allocator);
+    try hint.appendSlice(allocator, "expected one of: ");
+    for (note.allowed, 0..) |candidate, i| {
+        if (i > 0) try hint.appendSlice(allocator, ", ");
+        try hint.appendSlice(allocator, candidate);
+    }
+
+    return .{
+        .allocator = allocator,
+        .message = message,
+        .hint = try hint.toOwnedSlice(allocator),
     };
 }
 
