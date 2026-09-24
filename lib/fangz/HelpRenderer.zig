@@ -538,13 +538,17 @@ fn printWrappedProse(
     defer allocator.free(wrapped);
 
     var lines = std.mem.splitScalar(u8, wrapped, '\n');
-    if (lines.next()) |first| {
-        try printSpaces(writer, left_margin);
-        try writer.print("{s}\n", .{first});
-    }
+    var at_paragraph_start = true;
     while (lines.next()) |line| {
-        try printSpaces(writer, left_margin + prose_continuation_indent);
+        if (line.len == 0) {
+            try writer.print("\n", .{});
+            at_paragraph_start = true;
+            continue;
+        }
+
+        try printSpaces(writer, if (at_paragraph_start) left_margin else left_margin + prose_continuation_indent);
         try writer.print("{s}\n", .{line});
+        at_paragraph_start = false;
     }
 }
 
