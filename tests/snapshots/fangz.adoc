@@ -1130,7 +1130,7 @@ Each definition must use KEY=VALUE syntax. Definitions are not restricted to a f
 [#cmd-fangz-docs]
 === `fangz docs`
 
-Generate AsciiDoc documentation for this CLI
+Print AsciiDoc documentation for this CLI to standard output
 
 Parent: xref:cmd-fangz[`fangz`]
 
@@ -1190,25 +1190,6 @@ Set a free-form build definition.
 Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
 
 *Scope:* `global`
-===== `-o, --output-dir <STRING>`
-
-Output directory where the AsciiDoc documentation is written.
-
-*Default:* `zig-out/docs`
-
-*Scope:* `local`
-===== `-f, --file <STRING>`
-
-Output file name.
-
-*Default:* `fangz.adoc`
-
-*Scope:* `local`
-===== `--template <STRING>`
-
-Optional path to a custom Trama template file (AsciiDoc).
-
-*Scope:* `local`
 
 [#cmd-fangz-completion]
 === `fangz completion`

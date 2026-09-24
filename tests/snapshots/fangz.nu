@@ -230,9 +230,6 @@ module completions {
   ]
 
   export extern "fangz docs" [
-    --output-dir(-o): string # Output directory where the AsciiDoc documentation is written.
-    --file(-f): string # Output file name.
-    --template: string # Optional path to a custom Trama template file (AsciiDoc).
     --help(-h) # Print help
   ]
 

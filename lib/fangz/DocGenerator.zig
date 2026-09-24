@@ -41,7 +41,6 @@ pub fn generateDocs(
 
     const doc = try renderDocs(
         allocator,
-        io,
         root,
         options,
     );
@@ -60,10 +59,6 @@ pub fn generateDocs(
     try writeFile(io, output_path, doc, options.overwrite);
 }
 
-fn defaultOutputFileNameComptime(comptime binary_name: []const u8) []const u8 {
-    return comptime binary_name ++ ".adoc";
-}
-
 fn defaultOutputFileName(allocator: std.mem.Allocator, binary_name: []const u8) ![]u8 {
     return std.fmt.allocPrint(allocator, "{s}.adoc", .{binary_name});
 }
@@ -71,31 +66,15 @@ fn defaultOutputFileName(allocator: std.mem.Allocator, binary_name: []const u8) 
 /// Renders the complete AsciiDoc document without writing it to disk.
 pub fn renderDocs(
     allocator: std.mem.Allocator,
-    io: std.Io,
     root: *const Command,
     options: Options,
 ) ![]u8 {
     var model = try buildDocumentModel(allocator, root, options);
     defer model.deinit(allocator);
 
-    var template_owned: ?[]const u8 = null;
-    defer if (template_owned) |buf| allocator.free(buf);
-
-    const template_src: []const u8 = if (options.template_path) |p| blk: {
-        const file = if (std.fs.path.isAbsolute(p))
-            try std.Io.Dir.openFileAbsolute(io, p, .{})
-        else
-            try std.Io.Dir.cwd().openFile(io, p, .{});
-        defer file.close(io);
-        var reader = file.reader(io, &.{});
-        const buf = try reader.interface.allocRemaining(allocator, .limited(16 * 1024 * 1024));
-        template_owned = buf;
-        break :blk buf;
-    } else @embedFile("templates/default.adoc");
-
     return trama.renderAlloc(
         allocator,
-        template_src,
+        @embedFile("templates/default.adoc"),
         &model,
         .{ .escape_mode = .asciidoc },
     );
@@ -246,51 +225,25 @@ fn appendHelpCommandDoc(
 /// Registers the built-in `docs` subcommand on root.
 ///
 /// Generates AsciiDoc documentation for the application's full command tree. Called automatically by `App.ensureDocsCommand` — applications do not need to call this directly.
-pub fn registerDocsCommand(comptime binary_name: []const u8, root: *Command) !void {
+pub fn registerDocsCommand(root: *Command) !void {
     if (root.findSubcommand("docs") != null) return;
 
     const docs = try root.addSubcommand(.{
         .name = "docs",
-        .brief = "Generate AsciiDoc documentation for this CLI",
-    });
-
-    try docs.addFlag([]const u8, .{
-        .name = "output-dir",
-        .short = 'o',
-        .brief = "Output directory where the AsciiDoc documentation is written.",
-        .default = "zig-out/docs",
-    });
-
-    try docs.addFlag([]const u8, .{
-        .name = "file",
-        .short = 'f',
-        .brief = "Output file name.",
-        .default = defaultOutputFileNameComptime(binary_name),
-    });
-
-    try docs.addFlag([]const u8, .{
-        .name = "template",
-        .brief = "Optional path to a custom Trama template file (AsciiDoc).",
+        .brief = "Print AsciiDoc documentation for this CLI to standard output",
     });
 
     docs.setHooks(.{ .run = runDocsCommand });
 }
 
 fn runDocsCommand(ctx: *ParseContext) !void {
-    const output_dir = ctx.stringFlag("output-dir") orelse "zig-out/docs";
-    var file_owned: ?[]u8 = null;
-    defer if (file_owned) |buf| ctx.allocator.free(buf);
-    const file = ctx.stringFlag("file") orelse blk: {
-        file_owned = try defaultOutputFileName(ctx.allocator, ctx.command.root().name);
-        break :blk file_owned.?;
-    };
-    const template = ctx.stringFlag("template");
+    const doc = try renderDocs(ctx.allocator, ctx.command.root(), .{});
+    defer ctx.allocator.free(doc);
 
-    try generateDocs(ctx.allocator, ctx.io, ctx.command.root(), .{
-        .output_dir = output_dir,
-        .output_file_name = file,
-        .template_path = template,
-    });
+    var buf: [8192]u8 = undefined;
+    var out = std.Io.File.stdout().writer(ctx.io, &buf);
+    try out.interface.writeAll(doc);
+    try out.interface.flush();
 }
 
 fn writeFile(io: std.Io, path: []const u8, content: []const u8, overwrite: bool) !void {

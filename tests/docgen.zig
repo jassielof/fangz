@@ -14,7 +14,6 @@ test "shared fixture AsciiDoc matches the expected snapshot" {
     _ = try app.parseFrom(&.{});
     const current = try fangz.DocGenerator.renderDocs(
         testing.allocator,
-        testing.io,
         app.root(),
         .{},
     );

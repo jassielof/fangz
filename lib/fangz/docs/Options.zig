@@ -17,8 +17,6 @@ pub const TocPosition = enum {
 output_dir: []const u8 = "zig-out/docs",
 /// Output file name within `output_dir`. When empty, the module name is used.
 output_file_name: []const u8 = "",
-/// Optional path to a custom Trama template file (AsciiDoc source). Relative paths use the process working directory.
-template_path: ?[]const u8 = null,
 /// When true, hidden commands are included.
 include_hidden: bool = false,
 /// When false and the output file already exists, generation fails with `error.PathAlreadyExists` instead of replacing it.

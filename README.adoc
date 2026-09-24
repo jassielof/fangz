@@ -261,10 +261,8 @@ https://pandoc.org/MANUAL.html[Pandoc] can convert AsciiDoc to most
 document formats.
 
 The built-in `docs` subcommand, which Fangz injects into every
-application, writes a single AsciiDoc file to a configurable output
-directory (default `zig-out/docs`). Pass `--template` to use a custom
-Trama template (Go `text/template`–compatible syntax with AsciiDoc helpers;
-see `modules/trama`).
+application, prints a single AsciiDoc document to standard output. Redirect
+it with your shell, e.g. `myapp docs > myapp.adoc`.
 
 Commands and flags marked `hidden` are omitted unless documentation is  generated with `include_hidden` enabled.
 
