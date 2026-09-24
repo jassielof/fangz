@@ -67,7 +67,9 @@ pub fn render(
         try carnaval.Style.init().bolded().renderWithProfile("Aliases:", writer, profile);
         try writer.print("\n", .{});
         for (command.aliases.items) |alias| {
-            try writer.print("  {s}\n", .{alias});
+            try writer.print("  ", .{});
+            try carnaval.Style.init().fg(.{ .ansi16 = .cyan }).renderWithProfile(alias, writer, profile);
+            try writer.print("\n", .{});
         }
     }
 
