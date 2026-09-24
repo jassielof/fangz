@@ -1,0 +1,5 @@
+# Snapshot fixtures are compared byte-for-byte against generated output (LF).
+tests/snapshots/* text eol=lf
+
+# Embedded templates end up verbatim in generated output (LF).
+lib/fangz/templates/* text eol=lf
