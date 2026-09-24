@@ -133,7 +133,7 @@ fn renderAllowedValues(
             try writer.print(": ", .{});
             for (values, 0..) |value, i| {
                 if (i > 0) try writer.print(", ", .{});
-                try renderValueWithLabel(writer, profile, value, labels, i, default_index == i);
+                try renderValueWithLabel(writer, profile, value, labels, i, default_index == i, 0);
             }
             try writer.print("\n", .{});
         },
@@ -142,10 +142,13 @@ fn renderAllowedValues(
             try metaLabelStyle().renderWithProfile("Allowed:", writer, profile);
             try writer.print("\n", .{});
 
+            var value_width: usize = 0;
+            for (values) |value| value_width = @max(value_width, value.len);
+
             for (values, 0..) |value, i| {
                 try printSpaces(writer, pad + 2);
                 try metaLabelStyle().renderWithProfile("• ", writer, profile);
-                try renderValueWithLabel(writer, profile, value, labels, i, default_index == i);
+                try renderValueWithLabel(writer, profile, value, labels, i, default_index == i, value_width);
                 try writer.print("\n", .{});
             }
         },
@@ -159,17 +162,21 @@ fn renderValueWithLabel(
     labels: ?[]const []const u8,
     index: usize,
     is_default: bool,
+    value_width: usize,
 ) !void {
     try metaValueStyle().renderWithProfile(value, writer, profile);
+
+    // Pad the value cell so labels line up in a grid; the default tag trails the row.
+    if (labels) |lbls| {
+        if (index < lbls.len and lbls[index].len > 0) {
+            try printSpaces(writer, (value_width -| value.len) + 2);
+            try metaLabelStyle().renderWithProfile(lbls[index], writer, profile);
+        }
+    }
+
     if (is_default) {
         try writer.print(" ", .{});
         try metaTagStyle().renderWithProfile("(default)", writer, profile);
-    }
-    if (labels) |lbls| {
-        if (index < lbls.len and lbls[index].len > 0) {
-            try writer.print("  ", .{});
-            try metaLabelStyle().renderWithProfile(lbls[index], writer, profile);
-        }
     }
 }
 
