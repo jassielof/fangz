@@ -8,12 +8,12 @@ const ColorProfile = carnaval.ColorProfile;
 const Command = @import("Command.zig");
 const HelpMetadata = @import("HelpMetadata.zig");
 
-/// Target wrap width for help prose (brief, long descriptions, example blurbs).
-/// Aligned option/command summaries keep using the live terminal width instead.
-const help_prose_width = 70;
+/// Upper bound on the wrap width for help prose (brief, long descriptions, example blurbs).
+/// Prose follows the live terminal width but never exceeds this, since very long lines read poorly.
+const help_prose_max_width = 80;
 
-/// Continuation indent for wrapped help prose.
-const prose_continuation_indent = 2;
+/// Narrowest prose measure we will wrap to, so tiny terminals still get usable text.
+const help_prose_min_width = 30;
 
 /// Controls the verbosity of the rendered help output.
 ///
@@ -525,7 +525,9 @@ fn printMultilineDescription(
     }
 }
 
-/// Wraps and prints a help prose block at `help_prose_width` with optional left margin.
+/// Wraps and prints a help prose block flush against `left_margin`.
+///
+/// Paragraphs are block-style: every line shares the same margin and blank lines separate paragraphs, with no hanging indent. The measure follows the terminal width, capped at `help_prose_max_width`.
 fn printWrappedProse(
     writer: *std.Io.Writer,
     text: []const u8,
@@ -534,21 +536,17 @@ fn printWrappedProse(
 ) !void {
     if (text.len == 0) return;
 
-    const wrapped = try carnaval.wrapWithOptions(text, help_prose_width, carnaval.WrapOptions.prose, allocator);
+    const terminal_width = carnaval.terminalWidthForHandle(std.Io.File.stdout().handle);
+    const measure = std.math.clamp(terminal_width, help_prose_min_width, help_prose_max_width);
+    const width = @max(measure -| left_margin, help_prose_min_width -| left_margin, 10);
+
+    const wrapped = try carnaval.wrapWithOptions(text, width, carnaval.WrapOptions.prose, allocator);
     defer allocator.free(wrapped);
 
     var lines = std.mem.splitScalar(u8, wrapped, '\n');
-    var at_paragraph_start = true;
     while (lines.next()) |line| {
-        if (line.len == 0) {
-            try writer.print("\n", .{});
-            at_paragraph_start = true;
-            continue;
-        }
-
-        try printSpaces(writer, if (at_paragraph_start) left_margin else left_margin + prose_continuation_indent);
+        if (line.len > 0) try printSpaces(writer, left_margin);
         try writer.print("{s}\n", .{line});
-        at_paragraph_start = false;
     }
 }
 
