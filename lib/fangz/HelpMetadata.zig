@@ -49,6 +49,26 @@ pub fn renderPositionalMetadata(
     }
 }
 
+/// One-line allowed-values summary for short help (no labels or defaults).
+pub fn renderPositionalValuesBrief(
+    writer: *std.Io.Writer,
+    profile: ColorProfile,
+    arg: Command.Positional,
+    continuation_pad: usize,
+) !void {
+    const values = arg.allowed_values orelse return;
+    if (values.len == 0) return;
+
+    try printSpaces(writer, continuation_pad);
+    try metaLabelStyle().renderWithProfile("Allowed", writer, profile);
+    try writer.print(": ", .{});
+    for (values, 0..) |value, i| {
+        if (i > 0) try writer.print(", ", .{});
+        try metaValueStyle().renderWithProfile(value, writer, profile);
+    }
+    try writer.print("\n", .{});
+}
+
 pub fn renderFlagMetadata(
     writer: *std.Io.Writer,
     profile: ColorProfile,

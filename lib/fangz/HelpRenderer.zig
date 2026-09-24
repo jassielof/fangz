@@ -199,6 +199,8 @@ fn renderArguments(writer: *std.Io.Writer, command: *const Command, profile: Col
         const continuation_pad = 2 + spec_width + 2;
         if (mode == .full) {
             try HelpMetadata.renderPositionalMetadata(writer, profile, arg, continuation_pad);
+        } else {
+            try HelpMetadata.renderPositionalValuesBrief(writer, profile, arg, continuation_pad);
         }
 
         if (mode == .full and arg.description.len > 0) {
