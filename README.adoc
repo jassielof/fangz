@@ -276,11 +276,6 @@ The application name is inferred from the `.name` tag in `build.zig.zon` and can
 
 The version is read from `build.zig.zon` at build time via a build  injection step. When building inside a Git repository, the branch name  and short commit hash are appended to the version string. Version is  exposed as `--version` / `-V` by default.
 
-=== Description
-
-// TODO: No, the manifest shouldn't contain non-standard properties.
-The description is inferred from a `.description` field in `build.zig.zon` if present, and can be overridden at initialization.
-
 == Shell completions
 
 Fangz injects a `completion` subcommand into every application. Supported shells are Bash, Zsh, Fish, PowerShell, and Nushell. Nushell  supports both a static completion list and a dynamic completer module  via a `--dynamic` flag on the completion subcommand.
