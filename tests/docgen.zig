@@ -300,6 +300,87 @@ test "generateDocs refuses existing output when overwrite is false" {
     try testing.expectError(error.PathAlreadyExists, second);
 }
 
+test "shared fixture AsciiDoc separates headings from surrounding content" {
+    var app: fangz.App = undefined;
+    try fixture.initialize(&app, testing.allocator, testing.io);
+    defer app.deinit();
+
+    _ = try app.parseFrom(&.{});
+    const current = try fangz.DocGenerator.renderDocs(testing.allocator, app.root(), .{});
+    defer testing.allocator.free(current);
+
+    try expectWellSpacedHeadings(current);
+}
+
+test "generated AsciiDoc keeps angle brackets literal and escapes attribute braces" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    _ = try app.root().addSubcommand(.{
+        .name = "bundle",
+        .brief = "Copy into <output-dir>/<name>.",
+        .description = "Imports become @<namespace>/<name>:<version> and {attr} stays literal.",
+    });
+    _ = try app.parseFrom(&.{});
+
+    const current = try fangz.DocGenerator.renderDocs(testing.allocator, app.root(), .{});
+    defer testing.allocator.free(current);
+
+    try testing.expect(std.mem.indexOf(u8, current, "Copy into <output-dir>/<name>.") != null);
+    try testing.expect(std.mem.indexOf(u8, current, "@<namespace>/<name>:<version>") != null);
+    try testing.expect(std.mem.indexOf(u8, current, "\\<") == null);
+    try testing.expect(std.mem.indexOf(u8, current, "\\>") == null);
+    try testing.expect(std.mem.indexOf(u8, current, "\\{attr\\}") != null);
+    try expectWellSpacedHeadings(current);
+}
+
+/// Asserts every heading has a blank line before and after it, and every `[#anchor]` line has one before it, so AsciiDoc does not fold them into a neighbouring paragraph. The document title (line 1) and text inside delimited blocks are exempt.
+fn expectWellSpacedHeadings(doc: []const u8) !void {
+    var lines: std.ArrayList([]const u8) = .empty;
+    defer lines.deinit(testing.allocator);
+
+    var it = std.mem.splitScalar(u8, doc, '\n');
+    while (it.next()) |line| try lines.append(testing.allocator, line);
+
+    var in_block = false;
+    for (lines.items, 0..) |line, i| {
+        if (isBlockDelimiter(line)) {
+            in_block = !in_block;
+            continue;
+        }
+        if (in_block or i == 0) continue;
+
+        const previous = lines.items[i - 1];
+        const next: []const u8 = if (i + 1 < lines.items.len) lines.items[i + 1] else "";
+
+        if (std.mem.startsWith(u8, line, "[#") and previous.len != 0) {
+            std.debug.print("anchor on line {d} needs a blank line before it: {s}\n", .{ i + 1, line });
+            return error.AnchorNotSeparated;
+        }
+
+        if (isHeading(line)) {
+            const anchored = std.mem.startsWith(u8, previous, "[#");
+            if (previous.len != 0 and !anchored) {
+                std.debug.print("heading on line {d} needs a blank line before it: {s}\n", .{ i + 1, line });
+                return error.HeadingNotSeparated;
+            }
+            if (next.len != 0) {
+                std.debug.print("heading on line {d} needs a blank line after it: {s}\n", .{ i + 1, line });
+                return error.HeadingNotSeparated;
+            }
+        }
+    }
+}
+
+fn isBlockDelimiter(line: []const u8) bool {
+    return std.mem.eql(u8, line, "----") or std.mem.eql(u8, line, "====") or std.mem.eql(u8, line, "|===");
+}
+
+fn isHeading(line: []const u8) bool {
+    const markers = std.mem.indexOfNone(u8, line, "=") orelse return false;
+    return markers > 0 and markers < line.len and line[markers] == ' ';
+}
+
 fn makeApp() !fangz.App {
     return fangz.App.init(testing.allocator, testing.io, .{
         .brief = "test app",

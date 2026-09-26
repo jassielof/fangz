@@ -101,6 +101,7 @@ Print help.
 Print version.
 
 *Scope:* `built-in`
+
 == Command reference
 
 [#cmd-fangz-project]
@@ -118,7 +119,9 @@ Parent: xref:cmd-fangz[`fangz`]
 ----
 fangz project [OPTIONS] <COMMAND>
 ----
+
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -136,6 +139,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -147,6 +151,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -154,6 +159,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -161,6 +167,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -170,6 +177,7 @@ Each definition must use KEY=VALUE syntax. Definitions are not restricted to a f
 *Scope:* `global`
 
 ==== Subcommands
+
 * xref:cmd-fangz-project-init[`fangz project init`] -- Create a new project workspace.
 * xref:cmd-fangz-project-inspect[`fangz project inspect`] -- Show the resolved project configuration.
 * xref:cmd-fangz-project-list[`fangz project list`] -- List projects in the current workspace.
@@ -191,6 +199,7 @@ fangz project init [OPTIONS] <directory>
 ----
 
 ==== Arguments
+
 ===== `<directory>`
 
 Directory where the project is created.
@@ -198,6 +207,7 @@ Directory where the project is created.
 *Required* when present in the synopsis.
 
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -215,6 +225,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -226,6 +237,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -233,6 +245,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -240,6 +253,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -247,6 +261,7 @@ Set a free-form build definition.
 Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
 
 *Scope:* `global`
+
 ===== `-t, --template <VALUE>`
 
 Project template to initialize.
@@ -258,6 +273,7 @@ Templates select the initial module layout and recommended command set.
 *Possible values:* `application`, `library`, `service`
 
 *Scope:* `local`
+
 ===== `--[no-]git`
 
 Initialize a Git repository.
@@ -267,6 +283,7 @@ Use --no-git when the project will be placed inside an existing repository.
 *Default:* `true`
 
 *Scope:* `local`
+
 ===== `-m, --module <NAME>...`
 
 Add a repeatable starter module.
@@ -290,6 +307,7 @@ fangz project inspect [OPTIONS] <project>
 ----
 
 ==== Arguments
+
 ===== `<project>`
 
 Project name or path.
@@ -297,6 +315,7 @@ Project name or path.
 *Required* when present in the synopsis.
 
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -314,6 +333,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -325,6 +345,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -332,6 +353,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -339,6 +361,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -346,6 +369,7 @@ Set a free-form build definition.
 Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
 
 *Scope:* `global`
+
 ===== `-o, --output <VALUE>`
 
 Select the inspection output format.
@@ -355,6 +379,7 @@ Select the inspection output format.
 *Possible values:* `text`, `json`, `yaml`
 
 *Scope:* `local`
+
 ===== `--resolved`
 
 Include inherited and defaulted settings.
@@ -378,7 +403,9 @@ Parent: xref:cmd-fangz-project[`fangz project`]
 ----
 fangz project list [OPTIONS]
 ----
+
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -396,6 +423,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -407,6 +435,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -414,6 +443,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -421,6 +451,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -428,11 +459,13 @@ Set a free-form build definition.
 Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
 
 *Scope:* `global`
+
 ===== `-t, --tag <TAG>...`
 
 Filter by a repeatable project tag.
 
 *Scope:* `local`
+
 ===== `--limit <COUNT>`
 
 Maximum number of projects to return.
@@ -458,6 +491,7 @@ fangz deploy [OPTIONS] <environment> <artifacts>...
 ----
 
 ==== Arguments
+
 ===== `<environment>`
 
 Target environment.
@@ -465,6 +499,7 @@ Target environment.
 *Required* when present in the synopsis.
 
 *Possible values:* `development`, `staging`, `production`
+
 ===== `<artifacts>...`
 
 Artifact files to deploy.
@@ -472,6 +507,7 @@ Artifact files to deploy.
 *Variadic:* accepts multiple values.
 
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -489,6 +525,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -500,6 +537,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -507,6 +545,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -514,6 +553,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -521,6 +561,7 @@ Set a free-form build definition.
 Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
 
 *Scope:* `global`
+
 ===== `-s, --strategy <VALUE>`
 
 Rollout strategy.
@@ -532,6 +573,7 @@ Canary and blue-green deployments introduce additional validation before traffic
 *Possible values:* `rolling`, `canary`, `blue_green`
 
 *Scope:* `local`
+
 ===== `-p, --parallelism <COUNT>`
 
 Maximum concurrent deployment workers.
@@ -539,6 +581,7 @@ Maximum concurrent deployment workers.
 *Default:* `1`
 
 *Scope:* `local`
+
 ===== `--timeout <SECONDS>`
 
 Per-artifact timeout in seconds.
@@ -546,6 +589,7 @@ Per-artifact timeout in seconds.
 *Default:* `30`
 
 *Scope:* `local`
+
 ===== `-r, --region <REGION>`
 
 Optional deployment region.
@@ -553,6 +597,7 @@ Optional deployment region.
 *Possible values:* `us-east`, `us-west`, `eu-central`, `ap-southeast`
 
 *Scope:* `local`
+
 ===== `--[no-]wait`
 
 Wait for the rollout to become healthy.
@@ -560,16 +605,19 @@ Wait for the rollout to become healthy.
 *Default:* `true`
 
 *Scope:* `local`
+
 ===== `--dry-run`
 
 Plan the rollout without applying it.
 
 *Scope:* `local`
+
 ===== `--force`
 
 Apply despite an existing active rollout.
 
 *Scope:* `local`
+
 ===== `-E, --variable <SETTING=STATE>...`
 
 Set a constrained deployment variable.
@@ -641,6 +689,7 @@ fangz publish [OPTIONS] <manifest>
 ----
 
 ==== Arguments
+
 ===== `<manifest>`
 
 Release manifest to publish.
@@ -648,6 +697,7 @@ Release manifest to publish.
 *Required* when present in the synopsis.
 
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -665,6 +715,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -676,6 +727,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -683,6 +735,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -690,6 +743,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -697,6 +751,7 @@ Set a free-form build definition.
 Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
 
 *Scope:* `global`
+
 ===== `-T, --token <TOKEN>`
 
 Publishing credential.
@@ -704,6 +759,7 @@ Publishing credential.
 A token is required even when publishing to a development registry.
 
 *Scope:* `local`
+
 ===== `--[no-]signed`
 
 Require a signed manifest.
@@ -729,6 +785,7 @@ fangz logs [OPTIONS] <service>
 ----
 
 ==== Arguments
+
 ===== `<service>`
 
 Service whose logs should be queried.
@@ -738,6 +795,7 @@ Service whose logs should be queried.
 *Possible values:* `api`, `worker`, `web`
 
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -755,6 +813,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -766,6 +825,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -773,6 +833,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -780,6 +841,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -787,6 +849,7 @@ Set a free-form build definition.
 Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
 
 *Scope:* `global`
+
 ===== `--level <VALUE>`
 
 Minimum log level to return.
@@ -796,6 +859,7 @@ Minimum log level to return.
 *Possible values:* `trace`, `debug`, `info`, `warn`, `err`
 
 *Scope:* `local`
+
 ===== `-n, --tail <LINES>`
 
 Number of log entries to show.
@@ -803,6 +867,7 @@ Number of log entries to show.
 *Default:* `100`
 
 *Scope:* `local`
+
 ===== `-f, --follow`
 
 Continue streaming new log entries.
@@ -810,6 +875,7 @@ Continue streaming new log entries.
 *Default:* `false`
 
 *Scope:* `local`
+
 ===== `--since <RFC3339>`
 
 Only return entries newer than a timestamp.
@@ -833,6 +899,7 @@ fangz run [OPTIONS] <TASK> [-- <ARGS>...]
 ----
 
 ==== Arguments
+
 ===== `<task>`
 
 Task name to execute.
@@ -840,6 +907,7 @@ Task name to execute.
 *Required* when present in the synopsis.
 
 *Possible values:* `build`, `test`, `lint`, `package`
+
 ===== `<args>...`
 
 Arguments forwarded unchanged to the task.
@@ -847,6 +915,7 @@ Arguments forwarded unchanged to the task.
 *Variadic:* accepts multiple values.
 
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -864,6 +933,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -875,6 +945,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -882,6 +953,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -889,6 +961,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -896,6 +969,7 @@ Set a free-form build definition.
 Each definition must use KEY=VALUE syntax. Definitions are not restricted to a fixed key set.
 
 *Scope:* `global`
+
 ===== `--offline`
 
 Disable network access for the task.
@@ -919,7 +993,9 @@ Parent: xref:cmd-fangz[`fangz`]
 ----
 fangz config [OPTIONS] <COMMAND>
 ----
+
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -937,6 +1013,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -948,6 +1025,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -955,6 +1033,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -962,6 +1041,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -971,6 +1051,7 @@ Each definition must use KEY=VALUE syntax. Definitions are not restricted to a f
 *Scope:* `global`
 
 ==== Subcommands
+
 * xref:cmd-fangz-config-get[`fangz config get`] -- Read one workspace setting.
 * xref:cmd-fangz-config-set[`fangz config set`] -- Update one workspace setting.
 
@@ -989,6 +1070,7 @@ fangz config get [OPTIONS] <setting>
 ----
 
 ==== Arguments
+
 ===== `<setting>`
 
 Workspace setting name.
@@ -998,6 +1080,7 @@ Workspace setting name.
 *Possible values:* `output`, `region`, `retries`, `telemetry`
 
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -1015,6 +1098,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -1026,6 +1110,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -1033,6 +1118,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -1040,6 +1126,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -1063,6 +1150,7 @@ fangz config set [OPTIONS] <setting> <value>
 ----
 
 ==== Arguments
+
 ===== `<setting>`
 
 Workspace setting name.
@@ -1070,6 +1158,7 @@ Workspace setting name.
 *Required* when present in the synopsis.
 
 *Possible values:* `output`, `region`, `retries`, `telemetry`
+
 ===== `<value>`
 
 New setting value.
@@ -1077,6 +1166,7 @@ New setting value.
 *Required* when present in the synopsis.
 
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -1094,6 +1184,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -1105,6 +1196,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -1112,6 +1204,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -1119,6 +1212,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -1140,7 +1234,9 @@ Parent: xref:cmd-fangz[`fangz`]
 ----
 fangz docs [OPTIONS]
 ----
+
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -1158,6 +1254,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -1169,6 +1266,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -1176,6 +1274,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -1183,6 +1282,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
@@ -1206,6 +1306,7 @@ fangz completion [OPTIONS] <shell>
 ----
 
 ==== Arguments
+
 ===== `<shell>`
 
 Target shell.
@@ -1215,6 +1316,7 @@ Target shell.
 *Possible values:* `bash`, `zsh`, `fish`, `pwsh`, `nu`
 
 ==== Options
+
 ===== `-v, --verbose`
 
 Print detailed progress information.
@@ -1232,6 +1334,7 @@ Enable verbose progress messages for every command in the selected command path.
 fangz --verbose deploy staging
 ----
 ====
+
 ===== `--color <VALUE>`
 
 Control terminal color output.
@@ -1243,6 +1346,7 @@ Choose automatic color detection, force color, or disable color entirely.
 *Possible values:* `auto`, `always`, `never`
 
 *Scope:* `global`
+
 ===== `-c, --config <PATH>`
 
 Load configuration from a specific file.
@@ -1250,6 +1354,7 @@ Load configuration from a specific file.
 Override the default project configuration discovery path.
 
 *Scope:* `global`
+
 ===== `-l, --label <NAME>...`
 
 Attach a repeatable label to the operation.
@@ -1257,6 +1362,7 @@ Attach a repeatable label to the operation.
 Labels are free-form and are forwarded to project and deployment integrations.
 
 *Scope:* `global`
+
 ===== `-D, --define <KEY=VALUE>...`
 
 Set a free-form build definition.
