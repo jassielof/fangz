@@ -39,6 +39,7 @@ test "completion snapshots load in their target shells" {
 
     if (builtin.os.tag == .windows) {
         try sourceSnapshot(&tmp, "fangz.ps1", @embedFile("snapshots/fangz.ps1"), .pwsh);
+        try sourceSnapshot(&tmp, "fangz.nu", @embedFile("snapshots/fangz.nu"), .nu);
     } else {
         try sourceSnapshot(&tmp, "fangz.bash", @embedFile("snapshots/fangz.bash"), .bash);
         try sourceSnapshot(&tmp, "fangz.zsh", @embedFile("snapshots/fangz.zsh"), .zsh);
