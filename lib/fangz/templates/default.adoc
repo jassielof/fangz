@@ -4,6 +4,7 @@
 {{ end }}:toc: {{ toc }}
 :source-highlighter: highlight.js
 :doctype: book
+:nofooter:
 {{ if description }}
 [abstract]
 --
