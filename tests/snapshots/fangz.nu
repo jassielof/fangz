@@ -242,7 +242,7 @@ module completions {
     --help(-h) # Print help
   ]
 
-  # Generate AsciiDoc documentation for this CLI
+  # Print AsciiDoc documentation for this CLI to standard output
   export extern "fangz docs" [
     --help(-h) # Print help
   ]
