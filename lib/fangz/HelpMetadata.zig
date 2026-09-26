@@ -42,6 +42,7 @@ pub fn renderPositionalMetadata(
                 continuation_pad,
                 values,
                 arg.allowed_value_labels,
+                arg.allowed_value_aliases,
                 valuesLayout(arg.allowed_values_style, values.len),
                 null,
             );
@@ -114,6 +115,7 @@ pub fn renderFlagMetadata(
                 continuation_pad,
                 values,
                 flag.allowed_value_labels,
+                &.{},
                 valuesLayout(flag.allowed_values_style, values.len),
                 default_in_list,
             );
@@ -147,6 +149,7 @@ fn renderAllowedValues(
     pad: usize,
     values: []const []const u8,
     labels: ?[]const []const u8,
+    aliases: []const Command.AllowedValueAlias,
     layout: ValuesLayout,
     default_index: ?usize,
 ) !void {
@@ -157,7 +160,7 @@ fn renderAllowedValues(
             try writer.print(": ", .{});
             for (values, 0..) |value, i| {
                 if (i > 0) try writer.print(", ", .{});
-                try renderValueWithLabel(writer, profile, value, labels, i, default_index == i, 0);
+                try renderValueWithLabel(writer, profile, value, labels, aliases, i, default_index == i, 0);
             }
             try writer.print("\n", .{});
         },
@@ -172,7 +175,7 @@ fn renderAllowedValues(
             for (values, 0..) |value, i| {
                 try printSpaces(writer, pad + 2);
                 try metaLabelStyle().renderWithProfile("• ", writer, profile);
-                try renderValueWithLabel(writer, profile, value, labels, i, default_index == i, value_width);
+                try renderValueWithLabel(writer, profile, value, labels, aliases, i, default_index == i, value_width);
                 try writer.print("\n", .{});
             }
         },
@@ -184,13 +187,14 @@ fn renderValueWithLabel(
     profile: ColorProfile,
     value: []const u8,
     labels: ?[]const []const u8,
+    aliases: []const Command.AllowedValueAlias,
     index: usize,
     is_default: bool,
     value_width: usize,
 ) !void {
     try metaValueStyle().renderWithProfile(value, writer, profile);
 
-    // Pad the value cell so labels line up in a grid; the default tag trails the row.
+    // Pad the value cell so labels line up in a grid; the alias and default tags trail the row.
     if (labels) |lbls| {
         if (index < lbls.len and lbls[index].len > 0) {
             try printSpaces(writer, (value_width -| value.len) + 2);
@@ -198,10 +202,37 @@ fn renderValueWithLabel(
         }
     }
 
+    try renderAliasTag(writer, profile, value, aliases);
+
     if (is_default) {
         try writer.print(" ", .{});
         try metaTagStyle().renderWithProfile("(default)", writer, profile);
     }
+}
+
+/// Writes ` (alias: x)` or ` (aliases: x, y)` after `value`'s row when other spellings are accepted for it. It is set in the same italic tag style as `(default)`, so it reads as a note about the value rather than more of its description.
+fn renderAliasTag(writer: *std.Io.Writer, profile: ColorProfile, value: []const u8, aliases: []const Command.AllowedValueAlias) !void {
+    var count: usize = 0;
+    for (aliases) |alias| {
+        if (std.mem.eql(u8, alias.of, value)) count += 1;
+    }
+    if (count == 0) return;
+
+    var buffer: [256]u8 = undefined;
+    var note: std.Io.Writer = .fixed(&buffer);
+    try note.writeAll(if (count == 1) "(alias: " else "(aliases: ");
+
+    var written: usize = 0;
+    for (aliases) |alias| {
+        if (!std.mem.eql(u8, alias.of, value)) continue;
+        if (written > 0) try note.writeAll(", ");
+        try note.writeAll(alias.name);
+        written += 1;
+    }
+    try note.writeAll(")");
+
+    try writer.print(" ", .{});
+    try metaTagStyle().renderWithProfile(note.buffered(), writer, profile);
 }
 
 fn renderDefaultLine(

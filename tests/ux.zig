@@ -404,6 +404,69 @@ test "the parent command list shows each subcommand's aliases" {
     try testing.expect(std.mem.indexOf(u8, text, "No aliases.\n") != null);
 }
 
+/// Whether the styling applied to `note` in `text` includes italics (SGR code 3). A style may be emitted as several adjacent escape sequences, so this looks at the whole run of them directly before the text.
+fn isItalicBefore(text: []const u8, note: []const u8) !bool {
+    var end = std.mem.indexOf(u8, text, note) orelse return error.NoteNotFound;
+
+    while (end > 0 and text[end - 1] == 'm') {
+        const escape = std.mem.lastIndexOf(u8, text[0..end], "\x1b[") orelse return false;
+        const codes_text = text[escape + 2 .. end - 1];
+        if (std.mem.indexOfNone(u8, codes_text, "0123456789;") != null) return false;
+
+        var codes = std.mem.splitScalar(u8, codes_text, ';');
+        while (codes.next()) |code| {
+            if (std.mem.eql(u8, code, "3")) return true;
+        }
+        end = escape;
+    }
+    return false;
+}
+
+test "alias notes are set in italics when the terminal can style them" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{ .brief = "test app" });
+    defer app.deinit();
+
+    const bundle = try app.root().addSubcommand(.{ .name = "bundle", .brief = "Build it." });
+    try bundle.addAlias("build");
+    try bundle.addAlias("pack");
+    const pick = try app.root().addSubcommand(.{ .name = "pick" });
+    try pick.addPositional(.{
+        .name = "shell",
+        .brief = "Which shell.",
+        .allowed_values = &.{ "powershell", "bash" },
+        .allowed_value_aliases = &.{.{ .name = "pwsh", .of = "powershell" }},
+        .allowed_values_style = .bullet_list,
+    });
+    try app.root_command.freeze();
+
+    var buf: [8192]u8 = undefined;
+
+    // The parent's command list.
+    var list_writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&list_writer, app.root(), .ansi16, .short);
+    try testing.expect(try isItalicBefore(list_writer.buffered(), "(aliases: build, pack)"));
+
+    // An allowed-value row.
+    var value_writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&value_writer, pick, .ansi16, .full);
+    try testing.expect(try isItalicBefore(value_writer.buffered(), "(alias: pwsh)"));
+
+    // The Aliases section of the command's own help.
+    var section_writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&section_writer, bundle, .ansi16, .short);
+    const section = section_writer.buffered();
+    const after_heading = section[std.mem.indexOf(u8, section, "Aliases:").?..];
+    try testing.expect(try isItalicBefore(after_heading, "build"));
+    try testing.expect(try isItalicBefore(after_heading, "pack"));
+
+    // Without styling the same notes are plain text.
+    var plain_writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&plain_writer, pick, .none, .full);
+    try testing.expect(std.mem.indexOf(u8, plain_writer.buffered(), "powershell  Which") == null);
+    try testing.expect(std.mem.indexOf(u8, plain_writer.buffered(), "powershell (alias: pwsh)") != null);
+    try testing.expect(std.mem.indexOf(u8, plain_writer.buffered(), "\x1b[") == null);
+}
+
 test "help renders AsciiDoc inline markup when the terminal can style it" {
     var app = try fangz.App.init(testing.allocator, testing.io, .{
         .brief = "Copies into `<dir>` and keeps Print`help and Print_text as they are.",

@@ -76,7 +76,7 @@ pub fn render(
         try writer.print("\n", .{});
         for (command.aliases.items) |alias| {
             try writer.print("  ", .{});
-            try carnaval.Style.init().fg(.{ .ansi16 = .cyan }).renderWithProfile(alias, writer, profile);
+            try carnaval.Style.init().fg(.{ .ansi16 = .cyan }).withItalic(true).renderWithProfile(alias, writer, profile);
             try writer.print("\n", .{});
         }
     }
@@ -246,7 +246,7 @@ fn renderSubcommands(writer: *std.Io.Writer, command: *const Command, profile: C
         for (command.subcommands.items) |sub| {
             if (sub.group_id) |gid| {
                 if (std.mem.eql(u8, gid, group.id)) {
-                    const desc = try subcommandDescription(command.allocator, sub);
+                    const desc = try subcommandDescription(command.allocator, sub, profile);
                     defer command.allocator.free(desc);
                     try printAlignedCommandRow(writer, profile, "    ", sub.name, desc, cmd_width, terminal_width, command.allocator);
                 }
@@ -257,7 +257,7 @@ fn renderSubcommands(writer: *std.Io.Writer, command: *const Command, profile: C
     const default_indent = if (rendered_group_section) "    " else "  ";
     for (command.subcommands.items) |sub| {
         if (sub.group_id != null) continue;
-        const desc = try subcommandDescription(command.allocator, sub);
+        const desc = try subcommandDescription(command.allocator, sub, profile);
         defer command.allocator.free(desc);
         try printAlignedCommandRow(writer, profile, default_indent, sub.name, desc, cmd_width, terminal_width, command.allocator);
     }
@@ -466,27 +466,26 @@ fn optionSpecLen(flag: Command.Flag) usize {
     return len;
 }
 
-/// A subcommand's brief followed by its aliases, so the parent's command list shows every name that works. The caller owns the result.
-fn subcommandDescription(allocator: std.mem.Allocator, sub: *const Command) ![]u8 {
+/// A subcommand's brief followed by its aliases, so the parent's command list shows every name that works. The alias note is set in the same italic tag style as `(default)`, so it reads as a note about the command rather than more of its description. The caller owns the result.
+fn subcommandDescription(allocator: std.mem.Allocator, sub: *const Command, profile: ColorProfile) ![]u8 {
     if (sub.aliases.items.len == 0) return allocator.dupe(u8, sub.brief);
 
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
+    var note: std.ArrayList(u8) = .empty;
+    defer note.deinit(allocator);
 
-    if (sub.brief.len > 0) {
-        try out.appendSlice(allocator, sub.brief);
-        try out.append(allocator, ' ');
-    }
-    try out.appendSlice(allocator, if (sub.aliases.items.len == 1) "(alias: " else "(aliases: ");
+    try note.appendSlice(allocator, if (sub.aliases.items.len == 1) "(alias: " else "(aliases: ");
     for (sub.aliases.items, 0..) |alias, index| {
-        if (index != 0) try out.appendSlice(allocator, ", ");
-        try out.appendSlice(allocator, alias);
+        if (index != 0) try note.appendSlice(allocator, ", ");
+        try note.appendSlice(allocator, alias);
     }
-    try out.append(allocator, ')');
+    try note.append(allocator, ')');
 
-    return out.toOwnedSlice(allocator);
+    const styled = try carnaval.Style.init().dimmed().withItalic(true).renderAllocWithProfile(note.items, allocator, profile);
+    defer allocator.free(styled);
+
+    if (sub.brief.len == 0) return allocator.dupe(u8, styled);
+    return std.fmt.allocPrint(allocator, "{s} {s}", .{ sub.brief, styled });
 }
-
 /// Writes an aligned option row with compact gutter spacing.
 fn printAlignedOptionRow(
     writer: *std.Io.Writer,

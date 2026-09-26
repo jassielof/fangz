@@ -101,23 +101,12 @@ pub fn render(writer: *std.Io.Writer, root: *const Command, shell: Shell) !void 
     }
 }
 
+/// Display names for `Shell.allowedValues()`. Aliases are not part of the label: help adds them itself from `allowed_value_aliases`.
 fn shellAllowedValueLabels() []const []const u8 {
     return comptime blk: {
         var labels: [Shell.canonical_spellings.len][]const u8 = undefined;
-        for (Shell.canonical_spellings, 0..) |spelling, i| {
-            var names: []const u8 = "";
-            var count: usize = 0;
-            for (Shell.aliases) |alias| {
-                if (!std.mem.eql(u8, alias.of, spelling.name)) continue;
-                names = if (count == 0) alias.name else names ++ ", " ++ alias.name;
-                count += 1;
-            }
+        for (Shell.canonical_spellings, 0..) |spelling, i| labels[i] = spelling.shell.toPrettyName();
 
-            labels[i] = if (count == 0)
-                spelling.shell.toPrettyName()
-            else
-                std.fmt.comptimePrint("{s} ({s}: {s})", .{ spelling.shell.toPrettyName(), if (count == 1) "alias" else "aliases", names });
-        }
         const final = labels;
         break :blk &final;
     };
