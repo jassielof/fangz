@@ -136,8 +136,13 @@ pub fn generateCompletions(root: *const Command, shell: Shell, writer: *std.Io.W
 pub fn printDynamicSuggestions(io: std.Io, root: *Command, args: []const []const u8) !void {
     var out_buf: [8192]u8 = undefined;
     var out = std.Io.File.stdout().writer(io, &out_buf);
-    const writer = &out.interface;
 
+    try writeDynamicSuggestions(&out.interface, root, args);
+    try out.interface.flush();
+}
+
+/// Writes the suggestions for the hidden `__complete` command to `writer`, one per line as `value` or `value<TAB>description`.
+pub fn writeDynamicSuggestions(writer: *std.Io.Writer, root: *Command, args: []const []const u8) !void {
     const active = activeCommand(root, args);
     const prefix = if (args.len > 0) args[args.len - 1] else "";
 
@@ -146,8 +151,6 @@ pub fn printDynamicSuggestions(io: std.Io, root: *Command, args: []const []const
     } else {
         try suggestCommands(writer, active, prefix);
     }
-
-    try out.interface.flush();
 }
 
 fn activeCommand(root: *Command, args: []const []const u8) *Command {
@@ -167,15 +170,31 @@ fn activeCommand(root: *Command, args: []const []const u8) *Command {
     return active;
 }
 
+/// Writes one suggestion as `value` or `value<TAB>description`.
+///
+/// This is the wire format of the hidden `__complete` command; each shell script splits on the tab and uses the description where the shell can show one. The description is reduced to its first line so it can never break the line-oriented protocol.
+fn writeSuggestion(writer: *std.Io.Writer, value: []const u8, description: []const u8) !void {
+    try writer.writeAll(value);
+
+    const line_end = std.mem.indexOfAny(u8, description, "\r\n") orelse description.len;
+    const first_line = std.mem.trim(u8, description[0..line_end], " \t");
+    if (first_line.len > 0) {
+        try writer.writeByte('\t');
+        for (first_line) |byte| try writer.writeByte(if (byte == '\t') ' ' else byte);
+    }
+
+    try writer.writeByte('\n');
+}
+
 fn suggestCommands(writer: *std.Io.Writer, cmd: *const Command, prefix: []const u8) !void {
     for (cmd.subcommands.items) |sub| {
         if (prefix.len == 0 or std.mem.startsWith(u8, sub.name, prefix)) {
-            try writer.print("{s}\n", .{sub.name});
+            try writeSuggestion(writer, sub.name, sub.brief);
         }
     }
 
     if (prefix.len == 0 or std.mem.startsWith(u8, "help", prefix)) {
-        try writer.print("help\n", .{});
+        try writeSuggestion(writer, "help", "Print this message or the help of the given subcommand(s)");
     }
 }
 
@@ -191,23 +210,23 @@ fn suggestFlags(writer: *std.Io.Writer, cmd: *const Command, prefix: []const u8)
 
             var long_buf: [256]u8 = undefined;
             const long = std.fmt.bufPrint(&long_buf, "--{s}", .{flag.name}) catch continue;
-            if (std.mem.startsWith(u8, long, prefix)) try writer.print("{s}\n", .{long});
+            if (std.mem.startsWith(u8, long, prefix)) try writeSuggestion(writer, long, flag.brief);
 
             if (flag.short) |s| {
                 var short_buf: [2]u8 = .{ '-', s };
                 const short = short_buf[0..];
-                if (std.mem.startsWith(u8, short, prefix)) try writer.print("{s}\n", .{short});
+                if (std.mem.startsWith(u8, short, prefix)) try writeSuggestion(writer, short, flag.brief);
             }
         }
     }
 
-    if (std.mem.startsWith(u8, "--help", prefix)) try writer.print("--help\n", .{});
+    if (std.mem.startsWith(u8, "--help", prefix)) try writeSuggestion(writer, "--help", "Print help");
 
-    if (std.mem.startsWith(u8, "-h", prefix)) try writer.print("-h\n", .{});
+    if (std.mem.startsWith(u8, "-h", prefix)) try writeSuggestion(writer, "-h", "Print help");
 
     if (cmd.parent == null and cmd.rootConst().version != null) {
-        if (std.mem.startsWith(u8, "--version", prefix)) try writer.print("--version\n", .{});
-        if (std.mem.startsWith(u8, "-V", prefix)) try writer.print("-V\n", .{});
+        if (std.mem.startsWith(u8, "--version", prefix)) try writeSuggestion(writer, "--version", "Print version");
+        if (std.mem.startsWith(u8, "-V", prefix)) try writeSuggestion(writer, "-V", "Print version");
     }
 }
 
@@ -255,7 +274,14 @@ fn suggestFlagValues(
             if (flag.key_value_help) |kv| {
                 for (kv.keys) |meta| {
                     if (value_prefix.len == 0 or std.mem.startsWith(u8, meta.name, value_prefix)) {
-                        try writer.print("{s}{s}=\t{s}\t{s}\n", .{ name_prefix, meta.name, meta.default_value, meta.summary });
+                        var key_buf: [256]u8 = undefined;
+                        const key_value = std.fmt.bufPrint(&key_buf, "{s}{s}=", .{ name_prefix, meta.name }) catch continue;
+                        var desc_buf: [512]u8 = undefined;
+                        const desc = if (meta.default_value.len > 0)
+                            std.fmt.bufPrint(&desc_buf, "{s} [default: {s}]", .{ meta.summary, meta.default_value }) catch meta.summary
+                        else
+                            meta.summary;
+                        try writeSuggestion(writer, key_value, desc);
                     }
                 }
                 return;

@@ -16,6 +16,7 @@ pub fn render(writer: *std.Io.Writer, root: *const Command, path: []const u8, is
         try renderValueCompleters(writer, root, path);
     }
 
+    try renderExternDescription(writer, root.brief);
     try renderExternHeader(writer, path, is_root);
     try renderFlags(writer, root, path);
     try renderPositionals(writer, root, path);
@@ -147,6 +148,13 @@ fn containsCompleter(items: []const Command.NuCompleter, name: []const u8) bool 
         if (std.mem.eql(u8, existing.name, name)) return true;
     }
     return false;
+}
+
+/// Nushell shows the comment directly above an `extern` as that command's description in completion menus and `help`.
+fn renderExternDescription(writer: *std.Io.Writer, brief: []const u8) !void {
+    const line_end = std.mem.indexOfAny(u8, brief, "\r\n") orelse brief.len;
+    const first_line = std.mem.trim(u8, brief[0..line_end], " \t");
+    if (first_line.len > 0) try writer.print("  # {s}\n", .{first_line});
 }
 
 fn renderExternHeader(writer: *std.Io.Writer, path: []const u8, is_root: bool) !void {

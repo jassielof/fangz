@@ -2,7 +2,7 @@
 
 const std = @import("std");
 const refAllDecls = std.testing.refAllDecls;
-
+// TODO: Completions for typm for example, don't generate the help info for subcommands
 pub const App = @import("App.zig");
 pub const Command = @import("Command.zig");
 pub const CliExample = Command.CliExample;
@@ -11,7 +11,7 @@ pub const KeyValueKeyMeta = Command.KeyValueKeyMeta;
 pub const KeyValueValueMeta = Command.KeyValueValueMeta;
 pub const KeyValuePair = Command.KeyValuePair;
 pub const KeyValueList = Command.KeyValueList;
-const completions = @import("completions.zig");
+pub const completions = @import("completions.zig");
 pub const Shell = completions.Shell;
 pub const DocGenerator = @import("DocGenerator.zig");
 pub const HelpRenderer = @import("HelpRenderer.zig");

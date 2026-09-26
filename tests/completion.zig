@@ -66,6 +66,69 @@ test "completions alias resolves to completion command" {
     try testing.expectEqualStrings("completion", ctx.command.name);
 }
 
+fn dynamicSuggestions(app: *fangz.App, args: []const []const u8) ![]u8 {
+    var buffer: std.Io.Writer.Allocating = .init(testing.allocator);
+    errdefer buffer.deinit();
+    try fangz.completions.writeDynamicSuggestions(&buffer.writer, app.root(), args);
+    return buffer.toOwnedSlice();
+}
+
+test "dynamic suggestions pair each subcommand with its brief" {
+    var app: fangz.App = undefined;
+    try fixture.initialize(&app, testing.allocator, testing.io);
+    defer app.deinit();
+    _ = try app.parseFrom(&.{});
+
+    const output = try dynamicSuggestions(&app, &.{""});
+    defer testing.allocator.free(output);
+
+    try testing.expect(app.root().subcommands.items.len > 0);
+    for (app.root().subcommands.items) |sub| {
+        const line = try std.fmt.allocPrint(testing.allocator, "{s}\t{s}\n", .{ sub.name, sub.brief });
+        defer testing.allocator.free(line);
+        try testing.expect(std.mem.indexOf(u8, output, line) != null);
+    }
+    try testing.expect(std.mem.indexOf(u8, output, "help\tPrint this message or the help of the given subcommand(s)\n") != null);
+}
+
+test "dynamic suggestions describe flags" {
+    var app = try makeApp();
+    defer app.deinit();
+    _ = try app.parseFrom(&.{});
+
+    const output = try dynamicSuggestions(&app, &.{"-"});
+    defer testing.allocator.free(output);
+
+    try testing.expect(std.mem.indexOf(u8, output, "--help\tPrint help\n") != null);
+    try testing.expect(std.mem.indexOf(u8, output, "-V\tPrint version\n") != null);
+}
+
+test "dynamic suggestions keep descriptions on one line" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    _ = try app.root().addSubcommand(.{ .name = "sync", .brief = "First line.\nSecond\tline." });
+    _ = try app.parseFrom(&.{});
+
+    const output = try dynamicSuggestions(&app, &.{"s"});
+    defer testing.allocator.free(output);
+
+    try testing.expectEqualStrings("sync\tFirst line.\n", output);
+}
+
+test "dynamic suggestions omit the separator when there is no description" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    _ = try app.root().addSubcommand(.{ .name = "quiet" });
+    _ = try app.parseFrom(&.{});
+
+    const output = try dynamicSuggestions(&app, &.{"q"});
+    defer testing.allocator.free(output);
+
+    try testing.expectEqualStrings("quiet\n", output);
+}
+
 fn makeApp() !fangz.App {
     return fangz.App.init(testing.allocator, testing.io, .{
         .brief = "test app",

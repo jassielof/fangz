@@ -129,6 +129,7 @@ module completions {
     ]
   }
 
+  # Manage projects, releases, and operational tasks.
   export extern fangz [
     --verbose(-v) # Print detailed progress information. Enable verbose progress messages for every command in the selected command path.
     --color: string@complete-fangz-color # Control terminal color output. Choose automatic color detection, force color, or disable color entirely.
@@ -139,10 +140,12 @@ module completions {
     --version(-V) # Print version
   ]
 
+  # Create, inspect, and list projects.
   export extern "fangz project" [
     --help(-h) # Print help
   ]
 
+  # Create a new project workspace.
   export extern "fangz project init" [
     --template(-t): string@complete-fangz-project-init-template # Project template to initialize. Templates select the initial module layout and recommended command set.
     --git # Initialize a Git repository. Use --no-git when the project will be placed inside an existing repository.
@@ -152,6 +155,7 @@ module completions {
     directory: string@complete-project-directory # Directory where the project is created.
   ]
 
+  # Show the resolved project configuration.
   export extern "fangz project inspect" [
     --output(-o): string@complete-fangz-project-inspect-output # Select the inspection output format.
     --resolved # Include inherited and defaulted settings.
@@ -160,12 +164,14 @@ module completions {
     project: string # Project name or path.
   ]
 
+  # List projects in the current workspace.
   export extern "fangz project list" [
     --tag(-t): string # Filter by a repeatable project tag.
     --limit: string # Maximum number of projects to return.
     --help(-h) # Print help
   ]
 
+  # Deploy one or more project artifacts.
   export extern "fangz deploy" [
     --strategy(-s): string@complete-fangz-deploy-strategy # Rollout strategy. Canary and blue-green deployments introduce additional validation before traffic is switched.
     --parallelism(-p): string # Maximum concurrent deployment workers.
@@ -181,6 +187,7 @@ module completions {
     ...artifacts: string # Artifact files to deploy.
   ]
 
+  # Publish a release manifest.
   export extern "fangz publish" [
     --token(-T): string # Publishing credential. A token is required even when publishing to a development registry.
     --signed # Require a signed manifest.
@@ -189,6 +196,7 @@ module completions {
     manifest: string # Release manifest to publish.
   ]
 
+  # Stream or query service logs.
   export extern "fangz logs" [
     --level: string@complete-fangz-logs-level # Minimum log level to return.
     --tail(-n): string # Number of log entries to show.
@@ -199,6 +207,7 @@ module completions {
     service: string@complete-fangz-logs-service # Service whose logs should be queried.
   ]
 
+  # Run a workspace task with forwarded arguments.
   export extern "fangz run" [
     --offline # Disable network access for the task.
     --help(-h) # Print help
@@ -207,16 +216,19 @@ module completions {
     ...args: string # Arguments forwarded unchanged to the task.
   ]
 
+  # Read and update workspace settings.
   export extern "fangz config" [
     --help(-h) # Print help
   ]
 
+  # Read one workspace setting.
   export extern "fangz config get" [
     --help(-h) # Print help
 
     setting: string@complete-workspace-setting # Workspace setting name.
   ]
 
+  # Update one workspace setting.
   export extern "fangz config set" [
     --help(-h) # Print help
 
@@ -224,15 +236,18 @@ module completions {
     value: string # New setting value.
   ]
 
+  # Inspect internal diagnostic state.
   export extern "fangz debug" [
     --dump-tree # Print the registered command tree.
     --help(-h) # Print help
   ]
 
+  # Generate AsciiDoc documentation for this CLI
   export extern "fangz docs" [
     --help(-h) # Print help
   ]
 
+  # Generate shell completion scripts
   export extern "fangz completion" [
     --help(-h) # Print help
 
