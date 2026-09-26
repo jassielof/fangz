@@ -29,9 +29,9 @@ pub const Shell = enum {
     /// Returns the human-friendly name of the shell.
     pub fn toPrettyName(self: Shell) []const u8 {
         return switch (self) {
-            .bash => "Bash",
-            .zsh => "Zsh",
-            .fish => "Fish",
+            .bash => "Bourne Again Shell",
+            .zsh => "Z Shell",
+            .fish => "Friendly Interactive Shell",
             .pwsh => "PowerShell",
             .nu => "Nushell",
         };
