@@ -350,6 +350,32 @@ test "wrapped option descriptions hang two columns past the description column" 
     try expectHangingRow(writer.buffered(), "  --output-dir", "Build", 80);
 }
 
+test "help renders AsciiDoc inline markup when the terminal can style it" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{
+        .brief = "Copies into `<dir>` and keeps Print`help and Print_text as they are.",
+    });
+    defer app.deinit();
+    try app.root_command.freeze();
+
+    var buf: [8192]u8 = undefined;
+
+    var styled_writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&styled_writer, app.root(), .ansi16, .short);
+    const styled = styled_writer.buffered();
+    try testing.expect(std.mem.indexOf(u8, styled, "\x1b[") != null);
+    try testing.expect(std.mem.indexOf(u8, styled, "`<dir>`") == null);
+    try testing.expect(std.mem.indexOf(u8, styled, "<dir>") != null);
+    // Marks that do not form a span are ordinary text, not an error.
+    try testing.expect(std.mem.indexOf(u8, styled, "Print`help") != null);
+    try testing.expect(std.mem.indexOf(u8, styled, "Print_text") != null);
+
+    var plain_writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&plain_writer, app.root(), .none, .short);
+    const plain = plain_writer.buffered();
+    try testing.expect(std.mem.indexOf(u8, plain, "\x1b[") == null);
+    try testing.expect(std.mem.indexOf(u8, plain, "`<dir>`") != null);
+}
+
 fn initializeFixtureApp(app: *fangz.App) !void {
     try fixture.initialize(app, testing.allocator, testing.io);
 }

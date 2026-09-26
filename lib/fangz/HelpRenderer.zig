@@ -7,6 +7,7 @@ const ColorProfile = carnaval.ColorProfile;
 
 const Command = @import("Command.zig");
 const HelpMetadata = @import("HelpMetadata.zig");
+const InlineMarkup = @import("InlineMarkup.zig");
 
 /// Upper bound on the wrap width for help prose (brief, long descriptions, example blurbs).
 /// Prose follows the live terminal width but never exceeds this, since very long lines read poorly.
@@ -40,7 +41,7 @@ pub fn render(
     var started = false;
 
     if (command.brief.len > 0) {
-        try printWrappedProse(writer, command.brief, 0, command.allocator);
+        try printWrappedProse(writer, profile, command.brief, 0, command.allocator);
         started = true;
     }
 
@@ -54,7 +55,7 @@ pub fn render(
 
                 for (exs) |ex| {
                     if (ex.description.len > 0) {
-                        try printWrappedProse(writer, ex.description, 2, command.allocator);
+                        try printWrappedProse(writer, profile, ex.description, 2, command.allocator);
                     }
                     try writer.print("    {s}\n", .{ex.command});
                 }
@@ -65,7 +66,7 @@ pub fn render(
     if (mode == .full and command.description.len > 0) {
         if (started) try writer.print("\n", .{});
         started = true;
-        try printWrappedProse(writer, command.description, 0, command.allocator);
+        try printWrappedProse(writer, profile, command.description, 0, command.allocator);
     }
 
     if (command.aliases.items.len > 0) {
@@ -211,7 +212,7 @@ fn renderArguments(writer: *std.Io.Writer, command: *const Command, profile: Col
         }
 
         if (mode == .full and arg.description.len > 0) {
-            try printWrappedProse(writer, arg.description, continuation_pad, command.allocator);
+            try printWrappedProse(writer, profile, arg.description, continuation_pad, command.allocator);
         }
     }
 }
@@ -387,7 +388,7 @@ fn renderOneFlag(
     // In full-help mode, render long prose indented below the row.
     if (mode == .full and flag.description.len > 0) {
         const indent = 4 + spec_width + 2;
-        try printWrappedProse(writer, flag.description, indent, allocator);
+        try printWrappedProse(writer, profile, flag.description, indent, allocator);
     }
 
     if (mode == .full) {
@@ -401,7 +402,7 @@ fn renderOneFlag(
 
                 for (exs) |ex| {
                     if (ex.description.len > 0) {
-                        try printWrappedProse(writer, ex.description, indent + 2, allocator);
+                        try printWrappedProse(writer, profile, ex.description, indent + 2, allocator);
                     }
 
                     try printSpaces(writer, indent + 2);
@@ -418,7 +419,7 @@ fn renderOneFlag(
 
                 for (kv.examples) |ex| {
                     if (ex.description.len > 0) {
-                        try printWrappedProse(writer, ex.description, indent + 2, allocator);
+                        try printWrappedProse(writer, profile, ex.description, indent + 2, allocator);
                     }
                     try printSpaces(writer, indent + 2);
                     try writer.print("{s}\n", .{ex.command});
@@ -426,7 +427,7 @@ fn renderOneFlag(
             }
 
             if (kv.override_behavior_note.len > 0) {
-                try printWrappedProse(writer, kv.override_behavior_note, indent, allocator);
+                try printWrappedProse(writer, profile, kv.override_behavior_note, indent, allocator);
             }
         }
     }
@@ -481,7 +482,7 @@ fn printAlignedOptionRow(
     }
 
     const continuation_pad = 2 + spec_width + 2;
-    try printMultilineDescription(writer, desc, continuation_pad, terminal_width, allocator);
+    try printMultilineDescription(writer, profile, desc, continuation_pad, terminal_width, allocator);
 }
 
 /// Writes an aligned command row with compact gutter spacing.
@@ -506,12 +507,13 @@ fn printAlignedCommandRow(
     }
 
     const continuation_pad = indent.len + name_width + 2;
-    try printMultilineDescription(writer, desc, continuation_pad, terminal_width, allocator);
+    try printMultilineDescription(writer, profile, desc, continuation_pad, terminal_width, allocator);
 }
 
 /// Prints a row's description with a hanging indent: the first line follows the name inline, and every following line starts `row_hanging_indent` columns to the right of the description column, so a wrapped line reads as part of its own row rather than as a new entry.
 fn printMultilineDescription(
     writer: *std.Io.Writer,
+    profile: ColorProfile,
     desc: []const u8,
     continuation_pad: usize,
     terminal_width: usize,
@@ -525,13 +527,16 @@ fn printMultilineDescription(
     // The hanging indent counts toward the width, so wrapped lines never pass the terminal edge.
     const max_desc_width = if (terminal_width > continuation_pad + 4) terminal_width - continuation_pad - 2 else 20;
 
-    var source_lines = std.mem.splitScalar(u8, desc, '\n');
+    const styled = try InlineMarkup.render(allocator, desc, profile);
+    defer allocator.free(styled);
+
+    var source_lines = std.mem.splitScalar(u8, styled, '\n');
     var is_first_source_line = true;
     while (source_lines.next()) |source| {
         // Later source lines (explicit newlines) are indented as a whole; only the first wraps with the hanging indent applied by the wrapper.
         const width = if (is_first_source_line) max_desc_width else max_desc_width -| row_hanging_indent;
         const options: carnaval.WrapOptions = .{ .indent = if (is_first_source_line) row_hanging_indent else 0 };
-        const wrapped = try carnaval.wrapWithOptions(source, width, options, allocator);
+        const wrapped = try wrapForTerminal(allocator, source, width, options, profile);
         defer allocator.free(wrapped);
 
         var lines = std.mem.splitScalar(u8, wrapped, '\n');
@@ -556,6 +561,7 @@ fn printMultilineDescription(
 /// Paragraphs are block-style: every line shares the same margin and blank lines separate paragraphs, with no hanging indent. The measure follows the terminal width, capped at `help_prose_max_width`.
 fn printWrappedProse(
     writer: *std.Io.Writer,
+    profile: ColorProfile,
     text: []const u8,
     left_margin: usize,
     allocator: std.mem.Allocator,
@@ -566,7 +572,10 @@ fn printWrappedProse(
     const measure = std.math.clamp(terminal_width, help_prose_min_width, help_prose_max_width);
     const width = @max(measure -| left_margin, help_prose_min_width -| left_margin, 10);
 
-    const wrapped = try carnaval.wrapWithOptions(text, width, carnaval.WrapOptions.prose, allocator);
+    const styled = try InlineMarkup.render(allocator, text, profile);
+    defer allocator.free(styled);
+
+    const wrapped = try wrapForTerminal(allocator, styled, width, carnaval.WrapOptions.prose, profile);
     defer allocator.free(wrapped);
 
     var lines = std.mem.splitScalar(u8, wrapped, '\n');
@@ -574,6 +583,12 @@ fn printWrappedProse(
         if (line.len > 0) try printSpaces(writer, left_margin);
         try writer.print("{s}\n", .{line});
     }
+}
+
+/// Wraps `text` to `width` visible columns. Once inline markup has been turned into styling the text carries escape sequences, which must not count toward the width.
+fn wrapForTerminal(allocator: std.mem.Allocator, text: []const u8, width: usize, options: carnaval.WrapOptions, profile: ColorProfile) ![]u8 {
+    if (profile == .none) return carnaval.wrapWithOptions(text, width, options, allocator);
+    return carnaval.wrapAnsiWithOptions(text, width, options, allocator);
 }
 
 /// Writes `count` ASCII spaces.
