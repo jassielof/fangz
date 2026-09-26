@@ -52,10 +52,10 @@ pub const Shell = enum {
         .{ .name = "bash", .shell = .bash },
         .{ .name = "zsh", .shell = .zsh },
         .{ .name = "fish", .shell = .fish },
-        .{ .name = "pwsh", .shell = .pwsh },
-        .{ .name = "powershell", .shell = .pwsh, .alias_of = "pwsh" },
-        .{ .name = "nu", .shell = .nu },
-        .{ .name = "nushell", .shell = .nu, .alias_of = "nu" },
+        .{ .name = "pwsh", .shell = .pwsh, .alias_of = "powershell" },
+        .{ .name = "powershell", .shell = .pwsh },
+        .{ .name = "nu", .shell = .nu, .alias_of = "nushell" },
+        .{ .name = "nushell", .shell = .nu },
     };
 
     /// Returns every accepted spelling of a shell name, aliases included.
