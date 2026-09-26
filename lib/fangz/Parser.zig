@@ -477,14 +477,23 @@ fn validatePositionals(ctx: *ParseContext) !void {
         if (i >= got) break;
         const end = if (pos.variadic) got else i + 1;
         for (ctx.positionals.items[i..end]) |value| {
-            for (allowed) |candidate| {
-                if (std.mem.eql(u8, candidate, value)) break;
-            } else {
-                setInvalidValueNote(.{ .label_kind = .positional, .name = pos.name, .value = value, .allowed = allowed });
-                return ParseError.InvalidEnumValue;
-            }
+            if (isAllowedPositionalValue(pos, allowed, value)) continue;
+
+            setInvalidValueNote(.{ .label_kind = .positional, .name = pos.name, .value = value, .allowed = allowed });
+            return ParseError.InvalidEnumValue;
         }
     }
+}
+
+/// Whether `value` is one of the positional's allowed values or one of its declared aliases.
+fn isAllowedPositionalValue(pos: Command.Positional, allowed: []const []const u8, value: []const u8) bool {
+    for (allowed) |candidate| {
+        if (std.mem.eql(u8, candidate, value)) return true;
+    }
+    for (pos.allowed_value_aliases) |alias| {
+        if (std.mem.eql(u8, alias.name, value)) return true;
+    }
+    return false;
 }
 
 /// Validates required flags for local and inherited persistent scope.

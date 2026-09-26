@@ -350,6 +350,31 @@ test "wrapped option descriptions hang two columns past the description column" 
     try expectHangingRow(writer.buffered(), "  --output-dir", "Build", 80);
 }
 
+test "the parent command list shows each subcommand's aliases" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{ .brief = "test app" });
+    defer app.deinit();
+
+    const bundle = try app.root().addSubcommand(.{ .name = "bundle", .brief = "Build it." });
+    try bundle.addAlias("build");
+    try bundle.addAlias("pack");
+    const sync = try app.root().addSubcommand(.{ .name = "sync", .brief = "Sync it." });
+    try sync.addAlias("pull");
+    const bare = try app.root().addSubcommand(.{ .name = "bare" });
+    try bare.addAlias("naked");
+    _ = try app.root().addSubcommand(.{ .name = "plain", .brief = "No aliases." });
+    try app.root_command.freeze();
+
+    var buf: [8192]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .short);
+    const text = writer.buffered();
+
+    try testing.expect(std.mem.indexOf(u8, text, "Build it. (aliases: build, pack)\n") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "Sync it. (alias: pull)\n") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "(alias: naked)\n") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "No aliases.\n") != null);
+}
+
 test "help renders AsciiDoc inline markup when the terminal can style it" {
     var app = try fangz.App.init(testing.allocator, testing.io, .{
         .brief = "Copies into `<dir>` and keeps Print`help and Print_text as they are.",

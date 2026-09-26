@@ -124,9 +124,7 @@ fn renderPositionalCompleter(writer: *std.Io.Writer, path: []const u8, pos: Comm
 
     try writer.print("  def {s} [] {{\n    [\n", .{name});
     for (values) |value| try writer.print("      \"{s}\"\n", .{value});
-    if (std.mem.eql(u8, pos.name, "shell") and containsValue(values, "nu") and !containsValue(values, "nushell")) {
-        try writer.print("      \"nushell\"\n", .{});
-    }
+    for (pos.allowed_value_aliases) |alias| try writer.print("      \"{s}\"\n", .{alias.name});
     try writer.print("    ]\n  }}\n\n", .{});
 }
 
@@ -315,11 +313,4 @@ fn appendIdentifierPart(out: *std.ArrayList(u8), text: []const u8) !void {
             previous_dash = false;
         }
     }
-}
-
-fn containsValue(values: []const []const u8, needle: []const u8) bool {
-    for (values) |value| {
-        if (std.mem.eql(u8, value, needle)) return true;
-    }
-    return false;
 }

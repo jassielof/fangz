@@ -123,10 +123,10 @@ module completions {
       "bash"
       "zsh"
       "fish"
-      "pwsh"
       "powershell"
-      "nu"
       "nushell"
+      "pwsh"
+      "nu"
     ]
   }
 

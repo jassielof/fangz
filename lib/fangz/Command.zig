@@ -317,8 +317,18 @@ pub const Positional = struct {
     /// Optional display labels for each allowed value, shown alongside the value in help output.
     /// When provided, must have the same length as `allowed_values`.
     allowed_value_labels: ?[]const []const u8 = null,
+    /// Extra spellings that are accepted as valid values without being listed in `allowed_values`.
+    /// Help and generated docs show only the canonical values, so mention the aliases in `allowed_value_labels`.
+    allowed_value_aliases: []const AllowedValueAlias = &.{},
     /// Optional shell-specific completion logic for this positional.
     completion: Completion = .{},
+};
+
+/// An alternative spelling of one entry of a positional's `allowed_values`.
+pub const AllowedValueAlias = struct {
+    name: []const u8,
+    /// The entry of `allowed_values` this spelling stands for.
+    of: []const u8,
 };
 
 pub const Group = struct {

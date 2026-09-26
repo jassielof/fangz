@@ -41,38 +41,49 @@ pub const Shell = enum {
         return @tagName(self);
     }
 
-    /// Every spelling accepted on the command line. An alias names the canonical spelling it stands for and is listed right after it.
-    const Spelling = struct {
+    /// The spellings shown in help, in display order. Each names the shell it stands for.
+    const Canonical = struct {
         name: []const u8,
         shell: Shell,
-        alias_of: ?[]const u8 = null,
     };
 
-    const spellings = [_]Spelling{
+    const canonical_spellings = [_]Canonical{
         .{ .name = "bash", .shell = .bash },
         .{ .name = "zsh", .shell = .zsh },
         .{ .name = "fish", .shell = .fish },
-        .{ .name = "pwsh", .shell = .pwsh, .alias_of = "powershell" },
         .{ .name = "powershell", .shell = .pwsh },
-        .{ .name = "nu", .shell = .nu, .alias_of = "nushell" },
         .{ .name = "nushell", .shell = .nu },
     };
 
-    /// Returns every accepted spelling of a shell name, aliases included.
+    /// Extra spellings that are accepted but not listed as values of their own; each names the canonical spelling it stands for.
+    const aliases = [_]Command.AllowedValueAlias{
+        .{ .name = "pwsh", .of = "powershell" },
+        .{ .name = "nu", .of = "nushell" },
+    };
+
+    /// Returns the canonical spelling of every supported shell, in display order.
     pub fn allowedValues() []const []const u8 {
         return comptime blk: {
-            var values: [spellings.len][]const u8 = undefined;
-            for (spellings, 0..) |spelling, i| values[i] = spelling.name;
+            var values: [canonical_spellings.len][]const u8 = undefined;
+            for (canonical_spellings, 0..) |spelling, i| values[i] = spelling.name;
 
             const final = values;
             break :blk &final;
         };
     }
 
-    /// Resolves any accepted spelling, including aliases such as `nushell` and `powershell`.
+    /// Returns the alternative spellings that are accepted alongside `allowedValues()`.
+    pub fn allowedValueAliases() []const Command.AllowedValueAlias {
+        return &aliases;
+    }
+
+    /// Resolves a canonical spelling or an alias such as `pwsh` or `nu`.
     pub fn parse(input: []const u8) ?Shell {
-        for (spellings) |spelling| {
+        for (canonical_spellings) |spelling| {
             if (std.mem.eql(u8, input, spelling.name)) return spelling.shell;
+        }
+        for (aliases) |alias| {
+            if (std.mem.eql(u8, input, alias.name)) return parse(alias.of);
         }
 
         return null;
@@ -91,12 +102,20 @@ pub fn render(writer: *std.Io.Writer, root: *const Command, shell: Shell) !void 
 
 fn shellAllowedValueLabels() []const []const u8 {
     return comptime blk: {
-        var labels: [Shell.spellings.len][]const u8 = undefined;
-        for (Shell.spellings, 0..) |spelling, i| {
-            labels[i] = if (spelling.alias_of) |canonical|
-                std.fmt.comptimePrint("{s} (alias of {s})", .{ spelling.shell.toPrettyName(), canonical })
+        var labels: [Shell.canonical_spellings.len][]const u8 = undefined;
+        for (Shell.canonical_spellings, 0..) |spelling, i| {
+            var names: []const u8 = "";
+            var count: usize = 0;
+            for (Shell.aliases) |alias| {
+                if (!std.mem.eql(u8, alias.of, spelling.name)) continue;
+                names = if (count == 0) alias.name else names ++ ", " ++ alias.name;
+                count += 1;
+            }
+
+            labels[i] = if (count == 0)
+                spelling.shell.toPrettyName()
             else
-                spelling.shell.toPrettyName();
+                std.fmt.comptimePrint("{s} ({s}: {s})", .{ spelling.shell.toPrettyName(), if (count == 1) "alias" else "aliases", names });
         }
         const final = labels;
         break :blk &final;
@@ -120,6 +139,7 @@ pub fn registerCompletionCommand(root: *Command) !void {
         .required = true,
         .allowed_values = Shell.allowedValues(),
         .allowed_value_labels = shellAllowedValueLabels(),
+        .allowed_value_aliases = Shell.allowedValueAliases(),
         .allowed_values_style = .bullet_list,
     });
 

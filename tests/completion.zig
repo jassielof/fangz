@@ -141,6 +141,26 @@ test "shell aliases resolve to their canonical shell" {
     }
 }
 
+test "completion help lists each shell once with its aliases on the same line" {
+    var app = try makeApp();
+    defer app.deinit();
+    _ = try app.parseFrom(&.{});
+
+    const completion = app.root().findSubcommand("completion").?;
+
+    var buf: [8192]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, completion, .none, .full);
+    const text = writer.buffered();
+
+    try testing.expect(std.mem.indexOf(u8, text, "PowerShell (alias: pwsh)") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "Nushell (alias: nu)") != null);
+    // Aliases are not values of their own, so they get no bullet.
+    try testing.expect(std.mem.indexOf(u8, text, "• pwsh") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "• nu ") == null);
+    try testing.expect(std.mem.indexOf(u8, text, "• bash") != null);
+}
+
 test "completion command accepts shell aliases" {
     var app = try makeApp();
     defer app.deinit();

@@ -245,7 +245,9 @@ fn renderSubcommands(writer: *std.Io.Writer, command: *const Command, profile: C
         for (command.subcommands.items) |sub| {
             if (sub.group_id) |gid| {
                 if (std.mem.eql(u8, gid, group.id)) {
-                    try printAlignedCommandRow(writer, profile, "    ", sub.name, sub.brief, cmd_width, terminal_width, command.allocator);
+                    const desc = try subcommandDescription(command.allocator, sub);
+                    defer command.allocator.free(desc);
+                    try printAlignedCommandRow(writer, profile, "    ", sub.name, desc, cmd_width, terminal_width, command.allocator);
                 }
             }
         }
@@ -254,7 +256,9 @@ fn renderSubcommands(writer: *std.Io.Writer, command: *const Command, profile: C
     const default_indent = if (rendered_group_section) "    " else "  ";
     for (command.subcommands.items) |sub| {
         if (sub.group_id != null) continue;
-        try printAlignedCommandRow(writer, profile, default_indent, sub.name, sub.brief, cmd_width, terminal_width, command.allocator);
+        const desc = try subcommandDescription(command.allocator, sub);
+        defer command.allocator.free(desc);
+        try printAlignedCommandRow(writer, profile, default_indent, sub.name, desc, cmd_width, terminal_width, command.allocator);
     }
 
     try printAlignedCommandRow(
@@ -459,6 +463,27 @@ fn optionSpecLen(flag: Command.Flag) usize {
     if (ty_len > 0) len += ty_len + 3; // " <type>"
 
     return len;
+}
+
+/// A subcommand's brief followed by its aliases, so the parent's command list shows every name that works. The caller owns the result.
+fn subcommandDescription(allocator: std.mem.Allocator, sub: *const Command) ![]u8 {
+    if (sub.aliases.items.len == 0) return allocator.dupe(u8, sub.brief);
+
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+
+    if (sub.brief.len > 0) {
+        try out.appendSlice(allocator, sub.brief);
+        try out.append(allocator, ' ');
+    }
+    try out.appendSlice(allocator, if (sub.aliases.items.len == 1) "(alias: " else "(aliases: ");
+    for (sub.aliases.items, 0..) |alias, index| {
+        if (index != 0) try out.appendSlice(allocator, ", ");
+        try out.appendSlice(allocator, alias);
+    }
+    try out.append(allocator, ')');
+
+    return out.toOwnedSlice(allocator);
 }
 
 /// Writes an aligned option row with compact gutter spacing.

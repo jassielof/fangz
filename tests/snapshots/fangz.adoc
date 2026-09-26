@@ -1313,7 +1313,7 @@ Target shell.
 
 *Required* when present in the synopsis.
 
-*Possible values:* `bash`, `zsh`, `fish`, `pwsh`, `powershell`, `nu`, `nushell`
+*Possible values:* `bash`, `zsh`, `fish`, `powershell`, `nushell`
 
 ==== Options
 
