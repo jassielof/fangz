@@ -14,6 +14,9 @@ variadic_text: []const u8,
 value_hint: []const u8,
 possible_values: []const []const u8,
 has_possible_values: bool,
+/// What the positional falls back to when omitted, in words (`Positional.default_hint`).
+default_hint: []const u8,
+has_default: bool,
 
 pub fn deinit(self: *Positional, allocator: std.mem.Allocator) void {
     allocator.free(self.display);

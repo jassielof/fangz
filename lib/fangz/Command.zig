@@ -320,6 +320,8 @@ pub const Positional = struct {
     /// Extra spellings that are accepted as valid values without being listed in `allowed_values`.
     /// Help and generated docs show only the canonical values, so mention the aliases in `allowed_value_labels`.
     allowed_value_aliases: []const AllowedValueAlias = &.{},
+    /// What the positional falls back to when omitted, in words: shown as `Default: ...` like a flag's default. Use it for defaults that are worked out at run time; leave empty when there is none.
+    default_hint: []const u8 = "",
     /// Optional shell-specific completion logic for this positional.
     completion: Completion = .{},
 };

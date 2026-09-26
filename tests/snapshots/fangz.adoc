@@ -1311,9 +1311,11 @@ fangz completion [OPTIONS] [shell]
 
 ===== `[shell]`
 
-Target shell. Defaults to the shell running this program.
+Target shell.
 
 *Possible values:* `bash`, `zsh`, `fish`, `powershell`, `nushell`
+
+*Default:* the shell running this program
 
 ==== Options
 

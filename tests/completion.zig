@@ -71,7 +71,7 @@ test "completion help says the shell is optional and detected" {
     const text = writer.buffered();
 
     try testing.expect(std.mem.indexOf(u8, text, "[shell]") != null);
-    try testing.expect(std.mem.indexOf(u8, text, "Defaults to the shell running this program.") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "Default: the shell running this program") != null);
 }
 
 test "completions alias resolves to completion command" {

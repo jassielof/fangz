@@ -47,6 +47,10 @@ pub fn renderPositionalMetadata(
             );
         }
     }
+
+    if (arg.default_hint.len > 0) {
+        try renderDefaultText(writer, profile, continuation_pad, arg.default_hint);
+    }
 }
 
 /// One-line allowed-values summary for short help (no labels or defaults).
@@ -219,6 +223,11 @@ fn renderDefaultLine(
         .string_list => "set",
     };
 
+    try renderDefaultText(writer, profile, pad, value);
+}
+
+/// Writes one `Default: <value>` metadata line, the same for flags and positionals.
+fn renderDefaultText(writer: *std.Io.Writer, profile: ColorProfile, pad: usize, value: []const u8) !void {
     try printSpaces(writer, pad);
     try metaLabelStyle().renderWithProfile("Default", writer, profile);
     try writer.print(": ", .{});

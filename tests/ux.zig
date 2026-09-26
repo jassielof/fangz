@@ -350,6 +350,35 @@ test "wrapped option descriptions hang two columns past the description column" 
     try expectHangingRow(writer.buffered(), "  --output-dir", "Build", 80);
 }
 
+test "a positional's default is listed like a flag's" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{ .brief = "test app" });
+    defer app.deinit();
+
+    const open = try app.root().addSubcommand(.{ .name = "open" });
+    try open.addPositional(.{
+        .name = "target",
+        .brief = "What to open.",
+        .default_hint = "the current directory",
+        .allowed_values = &.{ "file", "dir" },
+    });
+    try open.addPositional(.{ .name = "extra", .brief = "Nothing special." });
+    try app.root_command.freeze();
+
+    var buf: [8192]u8 = undefined;
+
+    var full_writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&full_writer, open, .none, .full);
+    const full = full_writer.buffered();
+    try testing.expect(std.mem.indexOf(u8, full, "Default: the current directory\n") != null);
+    // Only the positional that has a default gets the line.
+    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, full, "Default: "));
+
+    // Short help stays compact, like it does for flags.
+    var short_writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&short_writer, open, .none, .short);
+    try testing.expect(std.mem.indexOf(u8, short_writer.buffered(), "Default:") == null);
+}
+
 test "the parent command list shows each subcommand's aliases" {
     var app = try fangz.App.init(testing.allocator, testing.io, .{ .brief = "test app" });
     defer app.deinit();

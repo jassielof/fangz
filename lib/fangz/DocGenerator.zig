@@ -389,6 +389,8 @@ fn buildPositionals(allocator: std.mem.Allocator, cmd: *const Command) ![]Positi
             .value_hint = pos.name,
             .possible_values = pos.allowed_values orelse &.{},
             .has_possible_values = pos.allowed_values != null and pos.allowed_values.?.len > 0,
+            .default_hint = pos.default_hint,
+            .has_default = pos.default_hint.len > 0,
         };
     }
     return items;

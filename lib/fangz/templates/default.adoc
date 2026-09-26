@@ -45,6 +45,10 @@
 
 *Possible values:* `{{ join .possible_values "`, `" }}`
 {{- end }}
+{{- if .has_default }}
+
+*Default:* {{ .default_hint }}
+{{- end }}
 {{ end -}}
 {{- end }}
 {{- if root.has_options }}
@@ -185,6 +189,10 @@ Parent: xref:{{ .parent_anchor }}[`{{ @raw .parent_display_path }}`]
 {{- if .has_possible_values }}
 
 *Possible values:* `{{ join .possible_values "`, `" }}`
+{{- end }}
+{{- if .has_default }}
+
+*Default:* {{ .default_hint }}
 {{- end }}
 {{- end -}}
 {{ define "flag" -}}

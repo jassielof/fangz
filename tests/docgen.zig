@@ -334,6 +334,23 @@ test "generated AsciiDoc keeps angle brackets literal and escapes attribute brac
     try expectWellSpacedHeadings(current);
 }
 
+test "generated AsciiDoc lists a positional's default" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    const open = try app.root().addSubcommand(.{ .name = "open" });
+    try open.addPositional(.{ .name = "target", .brief = "What to open.", .default_hint = "the current directory" });
+    try open.addPositional(.{ .name = "extra", .brief = "No default here." });
+    _ = try app.parseFrom(&.{});
+
+    const current = try fangz.DocGenerator.renderDocs(testing.allocator, app.root(), .{});
+    defer testing.allocator.free(current);
+
+    try testing.expect(std.mem.indexOf(u8, current, "*Default:* the current directory") != null);
+    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, current, "*Default:* the current directory"));
+    try expectWellSpacedHeadings(current);
+}
+
 /// Asserts every heading has a blank line before and after it, and every `[#anchor]` line has one before it, so AsciiDoc does not fold them into a neighbouring paragraph. The document title (line 1) and text inside delimited blocks are exempt.
 fn expectWellSpacedHeadings(doc: []const u8) !void {
     var lines: std.ArrayList([]const u8) = .empty;

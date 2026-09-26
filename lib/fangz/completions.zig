@@ -137,7 +137,8 @@ pub fn registerCompletionCommand(root: *Command) !void {
 
     try completion.addPositional(.{
         .name = "shell",
-        .brief = "Target shell. Defaults to the shell running this program.",
+        .brief = "Target shell.",
+        .default_hint = "the shell running this program",
         .allowed_values = Shell.allowedValues(),
         .allowed_value_labels = shellAllowedValueLabels(),
         .allowed_value_aliases = Shell.allowedValueAliases(),
