@@ -11,6 +11,7 @@ pub const nu = @import("completions/nu.zig");
 pub const pwsh = @import("completions/pwsh.zig");
 pub const zsh = @import("completions/zsh.zig");
 const ParseContext = @import("ParseContext.zig");
+const ShellDetect = @import("ShellDetect.zig");
 
 /// Supported shell targets for completion script generation.
 pub const Shell = enum {
@@ -129,27 +130,73 @@ pub fn registerCompletionCommand(root: *Command) !void {
     const completion = try root.addSubcommand(.{
         .name = "completion",
         .brief = "Generate shell completion scripts",
+        .description = "Prints a completion script for a shell. Without an argument it uses the shell that launched this program, found by walking up the process tree.",
     });
 
     try completion.addAlias("completions");
 
     try completion.addPositional(.{
         .name = "shell",
-        .brief = "Target shell.",
-        .required = true,
+        .brief = "Target shell. Defaults to the shell running this program.",
         .allowed_values = Shell.allowedValues(),
         .allowed_value_labels = shellAllowedValueLabels(),
         .allowed_value_aliases = Shell.allowedValueAliases(),
         .allowed_values_style = .bullet_list,
     });
 
-    completion.setHelpOnEmptyArgs(true);
     completion.setHooks(.{ .run = runCompletionCommand });
 }
 
 pub fn runCompletionCommand(ctx: *ParseContext) !void {
-    const shell = ctx.positional(0) orelse return error.MissingRequiredPositional;
+    const shell = ctx.positional(0) orelse detectShellOrExit(ctx);
     try printCompletionScript(ctx.io, ctx.command.root(), shell);
+}
+
+/// Picks the shell that launched this program. When that cannot be decided the user needs to say which one they mean, so print how and stop; returning an error here would surface as a stack trace in the host program.
+fn detectShellOrExit(ctx: *ParseContext) []const u8 {
+    const detection = ShellDetect.detect(ctx.allocator, ctx.io);
+    if (detection == .shell) return detection.shell;
+
+    const message = describeDetectionFailure(ctx.allocator, ctx.command.root().name, detection) catch "error: could not tell which shell is running; name it explicitly.\n";
+    var buffer: [1024]u8 = undefined;
+    var err = std.Io.File.stderr().writer(ctx.io, &buffer);
+    err.interface.writeAll(message) catch {};
+    err.interface.flush() catch {};
+    std.process.exit(1);
+}
+
+/// The error shown when no shell could be chosen automatically. The caller owns the result.
+fn describeDetectionFailure(allocator: std.mem.Allocator, program: []const u8, detection: ShellDetect.Detection) ![]u8 {
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    errdefer out.deinit();
+
+    switch (detection) {
+        .unsupported => |name| try out.writer.print("error: the shell running {s} ({s}) has no completion script.\n", .{ program, name }),
+        else => try out.writer.print("error: could not tell which shell is running {s}.\n", .{program}),
+    }
+
+    try out.writer.print("Name the one you want: {s} completion <", .{program});
+    for (Shell.allowedValues(), 0..) |spelling, index| {
+        if (index != 0) try out.writer.writeByte('|');
+        try out.writer.writeAll(spelling);
+    }
+    try out.writer.writeAll(">\n");
+
+    return out.toOwnedSlice();
+}
+
+test "the failure message names the program and the shells to choose from" {
+    const unknown = try describeDetectionFailure(std.testing.allocator, "typm", .unknown);
+    defer std.testing.allocator.free(unknown);
+    try std.testing.expectEqualStrings(
+        "error: could not tell which shell is running typm.\nName the one you want: typm completion <bash|zsh|fish|powershell|nushell>\n",
+        unknown,
+    );
+
+    const unsupported = try describeDetectionFailure(std.testing.allocator, "typm", .{ .unsupported = "tcsh" });
+    defer std.testing.allocator.free(unsupported);
+    try std.testing.expect(std.mem.startsWith(u8, unsupported, "error: the shell running typm (tcsh) has no completion script.\n"));
+    try std.testing.expect(std.mem.indexOf(u8, unsupported, "<bash|zsh|fish|powershell|nushell>") != null);
 }
 
 pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8) !void {

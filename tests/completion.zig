@@ -48,22 +48,40 @@ test "completion snapshots load in their target shells" {
     }
 }
 
-test "completion command with no args requests help" {
+test "completion command without a shell falls back to detecting one" {
     var app = try makeApp();
     defer app.deinit();
 
     const ctx = try app.parseFrom(&.{"completion"});
-    try testing.expect(ctx.help_requested);
+    try testing.expect(!ctx.help_requested);
     try testing.expectEqualStrings("completion", ctx.command.name);
+    try testing.expect(ctx.positional(0) == null);
+}
+
+test "completion help says the shell is optional and detected" {
+    var app = try makeApp();
+    defer app.deinit();
+    _ = try app.parseFrom(&.{});
+
+    const completion = app.root().findSubcommand("completion").?;
+
+    var buf: [8192]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, completion, .none, .full);
+    const text = writer.buffered();
+
+    try testing.expect(std.mem.indexOf(u8, text, "[shell]") != null);
+    try testing.expect(std.mem.indexOf(u8, text, "Defaults to the shell running this program.") != null);
 }
 
 test "completions alias resolves to completion command" {
     var app = try makeApp();
     defer app.deinit();
 
-    const ctx = try app.parseFrom(&.{"completions"});
-    try testing.expect(ctx.help_requested);
+    const ctx = try app.parseFrom(&.{ "completions", "bash" });
+    try testing.expect(!ctx.help_requested);
     try testing.expectEqualStrings("completion", ctx.command.name);
+    try testing.expectEqualStrings("bash", ctx.positional(0).?);
 }
 
 fn dynamicSuggestions(app: *fangz.App, args: []const []const u8) ![]u8 {

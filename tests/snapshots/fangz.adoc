@@ -1296,22 +1296,22 @@ Each definition must use KEY=VALUE syntax. Definitions are not restricted to a f
 
 Generate shell completion scripts
 
+Prints a completion script for a shell. Without an argument it uses the shell that launched this program, found by walking up the process tree.
+
 Parent: xref:cmd-fangz[`fangz`]
 
 ==== Synopsis
 
 [source,sh]
 ----
-fangz completion [OPTIONS] <shell>
+fangz completion [OPTIONS] [shell]
 ----
 
 ==== Arguments
 
-===== `<shell>`
+===== `[shell]`
 
-Target shell.
-
-*Required* when present in the synopsis.
+Target shell. Defaults to the shell running this program.
 
 *Possible values:* `bash`, `zsh`, `fish`, `powershell`, `nushell`
 

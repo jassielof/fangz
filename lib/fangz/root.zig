@@ -17,6 +17,7 @@ pub const HelpRenderer = @import("HelpRenderer.zig");
 const errors = @import("errors.zig");
 pub const Error = errors.Error;
 pub const InlineMarkup = @import("InlineMarkup.zig");
+pub const ShellDetect = @import("ShellDetect.zig");
 pub const ParseContext = @import("ParseContext.zig");
 pub const Parser = @import("Parser.zig");
 pub const Tokenizer = @import("Tokenizer.zig");
@@ -28,4 +29,6 @@ comptime {
 // Test blocks are only collected from files a test refers to, so name the ones that have their own.
 test {
     _ = InlineMarkup;
+    _ = ShellDetect;
+    _ = completions;
 }

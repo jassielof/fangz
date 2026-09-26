@@ -190,7 +190,8 @@ fn renderArguments(writer: *std.Io.Writer, command: *const Command, profile: Col
     for (command.positionals.items) |arg| {
         var spec_buf: [128]u8 = undefined;
         var sw: std.Io.Writer = .fixed(&spec_buf);
-        try sw.print("<{s}>", .{arg.name});
+        // Same convention as `Usage:` and the generated docs: `<name>` when required (or variadic), `[name]` when optional.
+        if (arg.required or arg.variadic) try sw.print("<{s}>", .{arg.name}) else try sw.print("[{s}]", .{arg.name});
         if (arg.variadic) try sw.print("{s}", .{HelpMetadata.variadic_metavar_suffix});
 
         try printAlignedCommandRow(

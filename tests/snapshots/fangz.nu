@@ -252,7 +252,7 @@ module completions {
   export extern "fangz completion" [
     --help(-h) # Print help
 
-    shell: string@complete-fangz-completion-shell # Target shell.
+    shell?: string@complete-fangz-completion-shell # Target shell. Defaults to the shell running this program.
   ]
 
 }
