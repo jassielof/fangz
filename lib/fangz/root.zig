@@ -2,7 +2,6 @@
 
 const std = @import("std");
 const refAllDecls = std.testing.refAllDecls;
-// TODO: Completions for typm for example, don't generate the help info for subcommands
 pub const App = @import("App.zig");
 pub const Command = @import("Command.zig");
 pub const CliExample = Command.CliExample;
