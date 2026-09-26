@@ -124,6 +124,7 @@ module completions {
       "zsh"
       "fish"
       "pwsh"
+      "powershell"
       "nu"
       "nushell"
     ]

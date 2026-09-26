@@ -31,19 +31,21 @@ pub fn render(
     const display_path = try commandDisplayPath(command.allocator, command);
     defer command.allocator.free(display_path);
 
-    try carnaval.Style.init().bolded().renderWithProfile(display_path, writer, profile);
-    try writer.print("\n", .{});
-
     const terminal_width = carnaval.terminalWidthForHandle(std.Io.File.stdout().handle);
+
+    // Help starts straight with the brief: the user just typed the command path, and `Usage:` repeats it. Sections are separated by a blank line only once something has been written.
+    var started = false;
 
     if (command.brief.len > 0) {
         try printWrappedProse(writer, command.brief, 0, command.allocator);
+        started = true;
     }
 
     if (mode == .full) {
         if (command.examples) |exs| {
             if (exs.len > 0) {
-                try writer.print("\n", .{});
+                if (started) try writer.print("\n", .{});
+                started = true;
                 try carnaval.Style.init().bolded().renderWithProfile("Examples:", writer, profile);
                 try writer.print("\n", .{});
 
@@ -58,12 +60,14 @@ pub fn render(
     }
 
     if (mode == .full and command.description.len > 0) {
-        try writer.print("\n", .{});
+        if (started) try writer.print("\n", .{});
+        started = true;
         try printWrappedProse(writer, command.description, 0, command.allocator);
     }
 
     if (command.aliases.items.len > 0) {
-        try writer.print("\n", .{});
+        if (started) try writer.print("\n", .{});
+        started = true;
         try carnaval.Style.init().bolded().renderWithProfile("Aliases:", writer, profile);
         try writer.print("\n", .{});
         for (command.aliases.items) |alias| {
@@ -73,7 +77,7 @@ pub fn render(
         }
     }
 
-    try renderUsage(writer, command, profile, display_path);
+    try renderUsage(writer, command, profile, display_path, started);
 
     if (command.positionals.items.len > 0) {
         try writer.print("\n", .{});
@@ -110,8 +114,8 @@ fn commandDisplayPath(allocator: std.mem.Allocator, command: *const Command) ![]
 }
 
 /// Renders usage line for a command.
-fn renderUsage(writer: *std.Io.Writer, command: *const Command, profile: ColorProfile, display_path: []const u8) !void {
-    try writer.print("\n", .{});
+fn renderUsage(writer: *std.Io.Writer, command: *const Command, profile: ColorProfile, display_path: []const u8, leading_blank: bool) !void {
+    if (leading_blank) try writer.print("\n", .{});
     try carnaval.Style.init().bolded().renderWithProfile("Usage:", writer, profile);
 
     if (command.usage_override) |u| {

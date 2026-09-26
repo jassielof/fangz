@@ -129,6 +129,31 @@ test "dynamic suggestions omit the separator when there is no description" {
     try testing.expectEqualStrings("quiet\n", output);
 }
 
+test "shell aliases resolve to their canonical shell" {
+    try testing.expectEqual(fangz.Shell.pwsh, fangz.Shell.parse("pwsh").?);
+    try testing.expectEqual(fangz.Shell.pwsh, fangz.Shell.parse("powershell").?);
+    try testing.expectEqual(fangz.Shell.nu, fangz.Shell.parse("nu").?);
+    try testing.expectEqual(fangz.Shell.nu, fangz.Shell.parse("nushell").?);
+    try testing.expect(fangz.Shell.parse("sh") == null);
+
+    for (fangz.Shell.allowedValues()) |spelling| {
+        try testing.expect(fangz.Shell.parse(spelling) != null);
+    }
+}
+
+test "completion command accepts shell aliases" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    for ([_][]const u8{ "powershell", "nushell", "pwsh", "nu", "bash" }) |shell| {
+        const ctx = try app.parseFrom(&.{ "completion", shell });
+        try testing.expectEqualStrings("completion", ctx.command.name);
+        try testing.expectEqualStrings(shell, ctx.positional(0).?);
+    }
+
+    try testing.expectError(error.InvalidEnumValue, app.parseFrom(&.{ "completion", "sh" }));
+}
+
 fn makeApp() !fangz.App {
     return fangz.App.init(testing.allocator, testing.io, .{
         .brief = "test app",

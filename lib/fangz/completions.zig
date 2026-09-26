@@ -41,27 +41,38 @@ pub const Shell = enum {
         return @tagName(self);
     }
 
-    /// Returns a list of allowed string values for the Shell enum.
+    /// Every spelling accepted on the command line. An alias names the canonical spelling it stands for and is listed right after it.
+    const Spelling = struct {
+        name: []const u8,
+        shell: Shell,
+        alias_of: ?[]const u8 = null,
+    };
+
+    const spellings = [_]Spelling{
+        .{ .name = "bash", .shell = .bash },
+        .{ .name = "zsh", .shell = .zsh },
+        .{ .name = "fish", .shell = .fish },
+        .{ .name = "pwsh", .shell = .pwsh },
+        .{ .name = "powershell", .shell = .pwsh, .alias_of = "pwsh" },
+        .{ .name = "nu", .shell = .nu },
+        .{ .name = "nushell", .shell = .nu, .alias_of = "nu" },
+    };
+
+    /// Returns every accepted spelling of a shell name, aliases included.
     pub fn allowedValues() []const []const u8 {
         return comptime blk: {
-            const fields = @typeInfo(Shell).@"enum".fields;
-            var values: [fields.len][]const u8 = undefined;
-
-            for (fields, 0..) |field, i| {
-                values[i] = field.name;
-            }
+            var values: [spellings.len][]const u8 = undefined;
+            for (spellings, 0..) |spelling, i| values[i] = spelling.name;
 
             const final = values;
-
             break :blk &final;
         };
     }
 
+    /// Resolves any accepted spelling, including aliases such as `nushell` and `powershell`.
     pub fn parse(input: []const u8) ?Shell {
-        if (std.mem.eql(u8, input, "nushell")) return .nu;
-
-        inline for (@typeInfo(Shell).@"enum".fields) |field| {
-            if (std.mem.eql(u8, input, field.name)) return @enumFromInt(field.value);
+        for (spellings) |spelling| {
+            if (std.mem.eql(u8, input, spelling.name)) return spelling.shell;
         }
 
         return null;
@@ -80,11 +91,12 @@ pub fn render(writer: *std.Io.Writer, root: *const Command, shell: Shell) !void 
 
 fn shellAllowedValueLabels() []const []const u8 {
     return comptime blk: {
-        const fields = @typeInfo(Shell).@"enum".fields;
-        var labels: [fields.len][]const u8 = undefined;
-        for (fields, 0..) |field, i| {
-            const shell_val: Shell = @enumFromInt(field.value);
-            labels[i] = shell_val.toPrettyName();
+        var labels: [Shell.spellings.len][]const u8 = undefined;
+        for (Shell.spellings, 0..) |spelling, i| {
+            labels[i] = if (spelling.alias_of) |canonical|
+                std.fmt.comptimePrint("{s} (alias of {s})", .{ spelling.shell.toPrettyName(), canonical })
+            else
+                spelling.shell.toPrettyName();
         }
         const final = labels;
         break :blk &final;

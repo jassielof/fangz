@@ -268,6 +268,61 @@ test "full help wraps prose without breaking urls" {
     try testing.expect(std.mem.indexOf(u8, text, "https://example.com/docs/\n") == null);
 }
 
+test "help starts with the brief instead of repeating the command path" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{ .brief = "Root brief." });
+    defer app.deinit();
+
+    const sync = try app.root().addSubcommand(.{ .name = "sync", .brief = "Sync things." });
+    const quiet = try app.root().addSubcommand(.{ .name = "quiet" });
+    try app.root_command.freeze();
+
+    var buf: [8192]u8 = undefined;
+
+    var root_writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&root_writer, app.root(), .none, .short);
+    try testing.expect(std.mem.startsWith(u8, root_writer.buffered(), "Root brief.\n"));
+
+    var sync_writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&sync_writer, sync, .none, .full);
+    try testing.expect(std.mem.startsWith(u8, sync_writer.buffered(), "Sync things.\n"));
+    try testing.expect(std.mem.indexOf(u8, sync_writer.buffered(), "Usage: ") != null);
+
+    // Without a brief there is nothing to lead with, and no stray blank line either.
+    var quiet_writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&quiet_writer, quiet, .none, .short);
+    try testing.expect(std.mem.startsWith(u8, quiet_writer.buffered(), "Usage: "));
+}
+
+test "wrapped command descriptions hang under the description column" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{ .brief = "test app" });
+    defer app.deinit();
+
+    _ = try app.root().addSubcommand(.{ .name = "a", .brief = "Short." });
+    _ = try app.root().addSubcommand(.{
+        .name = "bundle",
+        .brief = "Build a package from its manifest so it can be published or installed, validating the name, the version, and the declared compiler requirement first.",
+    });
+    try app.root_command.freeze();
+
+    var buf: [8192]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .short);
+
+    var lines = std.mem.splitScalar(u8, writer.buffered(), '\n');
+    while (lines.next()) |row| {
+        if (!std.mem.startsWith(u8, row, "  bundle ")) continue;
+
+        const column = std.mem.indexOf(u8, row, "Build").?;
+        const continuation = lines.next() orelse return error.DescriptionDidNotWrap;
+        try testing.expect(continuation.len > column);
+        try testing.expect(std.mem.indexOfNone(u8, continuation[0..column], " ") == null);
+        try testing.expect(continuation[column] != ' ');
+        return;
+    }
+
+    return error.CommandRowNotFound;
+}
+
 fn initializeFixtureApp(app: *fangz.App) !void {
     try fixture.initialize(app, testing.allocator, testing.io);
 }
