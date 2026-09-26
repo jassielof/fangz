@@ -15,6 +15,9 @@ const help_prose_max_width = 80;
 /// Narrowest prose measure we will wrap to, so tiny terminals still get usable text.
 const help_prose_min_width = 30;
 
+/// How far wrapped lines of a command, option, or argument row hang to the right of its description column.
+const row_hanging_indent = 2;
+
 /// Controls the verbosity of the rendered help output.
 ///
 /// - `.short` — compact output triggered by `-h`: synopsis, argument list, flag list with one-liner summaries only (no metadata lines).
@@ -506,7 +509,7 @@ fn printAlignedCommandRow(
     try printMultilineDescription(writer, desc, continuation_pad, terminal_width, allocator);
 }
 
-/// Prints first description line inline and aligns continuation lines.
+/// Prints a row's description with a hanging indent: the first line follows the name inline, and every following line starts `row_hanging_indent` columns to the right of the description column, so a wrapped line reads as part of its own row rather than as a new entry.
 fn printMultilineDescription(
     writer: *std.Io.Writer,
     desc: []const u8,
@@ -519,17 +522,32 @@ fn printMultilineDescription(
         return;
     }
 
+    // The hanging indent counts toward the width, so wrapped lines never pass the terminal edge.
     const max_desc_width = if (terminal_width > continuation_pad + 4) terminal_width - continuation_pad - 2 else 20;
-    const wrapped = try carnaval.wrapWithOptions(desc, max_desc_width, carnaval.WrapOptions.prose, allocator);
-    defer allocator.free(wrapped);
 
-    var lines = std.mem.splitScalar(u8, wrapped, '\n');
-    if (lines.next()) |first| {
-        try writer.print("  {s}\n", .{first});
-    }
-    while (lines.next()) |line| {
-        try printSpaces(writer, continuation_pad);
-        try writer.print("{s}\n", .{line});
+    var source_lines = std.mem.splitScalar(u8, desc, '\n');
+    var is_first_source_line = true;
+    while (source_lines.next()) |source| {
+        // Later source lines (explicit newlines) are indented as a whole; only the first wraps with the hanging indent applied by the wrapper.
+        const width = if (is_first_source_line) max_desc_width else max_desc_width -| row_hanging_indent;
+        const options: carnaval.WrapOptions = .{ .indent = if (is_first_source_line) row_hanging_indent else 0 };
+        const wrapped = try carnaval.wrapWithOptions(source, width, options, allocator);
+        defer allocator.free(wrapped);
+
+        var lines = std.mem.splitScalar(u8, wrapped, '\n');
+        var index: usize = 0;
+        while (lines.next()) |line| : (index += 1) {
+            if (is_first_source_line and index == 0) {
+                try writer.print("  {s}\n", .{line});
+            } else if (line.len == 0) {
+                try writer.print("\n", .{});
+            } else {
+                try printSpaces(writer, continuation_pad);
+                if (!is_first_source_line) try printSpaces(writer, row_hanging_indent);
+                try writer.print("{s}\n", .{line});
+            }
+        }
+        is_first_source_line = false;
     }
 }
 

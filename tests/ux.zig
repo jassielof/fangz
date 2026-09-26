@@ -293,34 +293,61 @@ test "help starts with the brief instead of repeating the command path" {
     try testing.expect(std.mem.startsWith(u8, quiet_writer.buffered(), "Usage: "));
 }
 
-test "wrapped command descriptions hang under the description column" {
+const long_brief = "Build a package from its manifest so it can be published or installed, validating the name, the version, and the declared compiler requirement first.";
+
+/// Finds the row starting with `row_prefix`, then checks every wrapped line after it hangs exactly two columns to the right of where the description starts, and stays within `max_width`.
+fn expectHangingRow(help: []const u8, row_prefix: []const u8, description_start: []const u8, max_width: usize) !void {
+    var lines = std.mem.splitScalar(u8, help, '\n');
+    while (lines.next()) |row| {
+        if (!std.mem.startsWith(u8, row, row_prefix)) continue;
+
+        const column = std.mem.indexOf(u8, row, description_start).?;
+        var wrapped_lines: usize = 0;
+        while (lines.next()) |line| : (wrapped_lines += 1) {
+            if (line.len == 0 or line[0] != ' ' or line.len <= column) break;
+            if (std.mem.indexOfNone(u8, line[0 .. column + 2], " ") != null) break;
+
+            try testing.expect(line[column + 2] != ' ');
+            try testing.expect(line.len <= max_width);
+        }
+
+        try testing.expect(wrapped_lines >= 1);
+        return;
+    }
+
+    return error.RowNotFound;
+}
+
+test "wrapped command descriptions hang two columns past the description column" {
     var app = try fangz.App.init(testing.allocator, testing.io, .{ .brief = "test app" });
     defer app.deinit();
 
     _ = try app.root().addSubcommand(.{ .name = "a", .brief = "Short." });
-    _ = try app.root().addSubcommand(.{
-        .name = "bundle",
-        .brief = "Build a package from its manifest so it can be published or installed, validating the name, the version, and the declared compiler requirement first.",
-    });
+    _ = try app.root().addSubcommand(.{ .name = "bundle", .brief = long_brief });
     try app.root_command.freeze();
 
     var buf: [8192]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buf);
     try fangz.HelpRenderer.render(&writer, app.root(), .none, .short);
 
-    var lines = std.mem.splitScalar(u8, writer.buffered(), '\n');
-    while (lines.next()) |row| {
-        if (!std.mem.startsWith(u8, row, "  bundle ")) continue;
+    try expectHangingRow(writer.buffered(), "  bundle ", "Build", 80);
+    // A one-line entry next to a wrapped one gets no continuation.
+    try testing.expect(std.mem.indexOf(u8, writer.buffered(), "  a       Short.\n") != null);
+}
 
-        const column = std.mem.indexOf(u8, row, "Build").?;
-        const continuation = lines.next() orelse return error.DescriptionDidNotWrap;
-        try testing.expect(continuation.len > column);
-        try testing.expect(std.mem.indexOfNone(u8, continuation[0..column], " ") == null);
-        try testing.expect(continuation[column] != ' ');
-        return;
-    }
+test "wrapped option descriptions hang two columns past the description column" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{ .brief = "test app" });
+    defer app.deinit();
 
-    return error.CommandRowNotFound;
+    const sub = try app.root().addSubcommand(.{ .name = "run" });
+    try sub.addFlag([]const u8, .{ .name = "output-dir", .brief = long_brief });
+    try app.root_command.freeze();
+
+    var buf: [8192]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, sub, .none, .short);
+
+    try expectHangingRow(writer.buffered(), "  --output-dir", "Build", 80);
 }
 
 fn initializeFixtureApp(app: *fangz.App) !void {
