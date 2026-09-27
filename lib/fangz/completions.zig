@@ -12,7 +12,8 @@ pub const pwsh = @import("completions/pwsh.zig");
 pub const zsh = @import("completions/zsh.zig");
 const ParseContext = @import("ParseContext.zig");
 const ShellDetect = @import("ShellDetect.zig");
-
+// TODO: there should be a way to register custom full completion scripts, in case the user doesn't want Fangz to autogenerate it for them, and possibly they want to maintain it themselves. This way the user themself can add completions on their own, with custom logic, custom help, formatting, support non-standard shells, etc.
+// TODO: As well, add a toggle for Fangz to not generate completions at all, that way the user can opt-out in case they simply want a clean CLI help info. But the shell completions should be opt-out, by default they should always be generated for convenience.
 /// Supported shell targets for completion script generation.
 pub const Shell = enum {
     /// <https://www.gnu.org/software/bash/>
@@ -198,6 +199,7 @@ pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8) !voi
     try out.interface.flush();
 }
 
+// TODO: This function should be removed, wrapper-functions that call just one function shouldn't exist, just use render() directly.
 pub fn generateCompletions(root: *const Command, shell: Shell, writer: *std.Io.Writer) !void {
     try render(writer, root, shell);
 }

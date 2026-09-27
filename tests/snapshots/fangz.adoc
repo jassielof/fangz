@@ -4,6 +4,7 @@ v1.0.0, 2026-08-19 -- e2e (sample)
 :toc: auto
 :source-highlighter: highlight.js
 :doctype: book
+:nofooter:
 
 [abstract]
 --

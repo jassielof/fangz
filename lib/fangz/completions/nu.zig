@@ -1,6 +1,7 @@
-//! Nushell completion script renderer.
+//! The nu namespace provides completion script renderer for Nushell.
 //!
-//! References:
+//! # References
+//!
 //! - https://www.nushell.sh/book/custom_completions.html
 //! - https://www.nushell.sh/book/externs.html
 
