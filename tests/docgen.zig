@@ -398,6 +398,23 @@ fn isHeading(line: []const u8) bool {
     return markers > 0 and markers < line.len and line[markers] == ' ';
 }
 
+test "setDocsEnabled(false) removes the docs command" {
+    var app = try makeApp();
+    defer app.deinit();
+    app.setDocsEnabled(false);
+
+    _ = try app.parseFrom(&.{});
+    try testing.expect(app.root().findSubcommand("docs") == null);
+}
+
+test "setDocsEnabled defaults to true" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    _ = try app.parseFrom(&.{});
+    try testing.expect(app.root().findSubcommand("docs") != null);
+}
+
 fn makeApp() !fangz.App {
     return fangz.App.init(testing.allocator, testing.io, .{
         .brief = "test app",

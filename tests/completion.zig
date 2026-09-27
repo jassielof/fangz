@@ -216,6 +216,24 @@ test "a renderer registered on the app is accepted as a completion shell" {
     try testing.expectEqualStrings(expected, writer.buffered());
 }
 
+test "setCompletionsEnabled(false) removes the completion command" {
+    var app = try makeApp();
+    defer app.deinit();
+    app.setCompletionsEnabled(false);
+
+    _ = try app.parseFrom(&.{});
+    try testing.expect(app.root().findSubcommand("completion") == null);
+    try testing.expect(app.root().findSubcommand("completions") == null);
+}
+
+test "setCompletionsEnabled defaults to true" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    _ = try app.parseFrom(&.{});
+    try testing.expect(app.root().findSubcommand("completion") != null);
+}
+
 fn makeApp() !fangz.App {
     return fangz.App.init(testing.allocator, testing.io, .{
         .brief = "test app",

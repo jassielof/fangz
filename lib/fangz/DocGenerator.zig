@@ -30,8 +30,9 @@ const ListWriter = struct {
     }
 };
 
-// TODO: Similar to the to-do in completions.zig, docs generation should be toggable, or customizable, as the user might not want docs generation in their CLI for being lean or anything, or they simply might want to generate their own in Markdown or another format. Again, should be opt-out and enabled by default for convenience.
 /// Generates AsciiDoc documentation for the given command hierarchy.
+///
+/// The built-in `docs` command that calls this can be turned off with `App.setDocsEnabled(false)` (opt-out; registered by default), for a leaner CLI or to generate documentation some other way instead.
 pub fn generateDocs(
     allocator: std.mem.Allocator,
     io: std.Io,
