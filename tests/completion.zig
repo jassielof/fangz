@@ -192,6 +192,30 @@ test "completion command accepts shell aliases" {
     try testing.expectError(error.InvalidEnumValue, app.parseFrom(&.{ "completion", "sh" }));
 }
 
+test "a renderer registered on the app is accepted as a completion shell" {
+    var app = try makeApp();
+    defer app.deinit();
+
+    try app.registerCompletionRenderer("elvish", struct {
+        fn render(writer: *std.Io.Writer, cmd: *const fangz.Command) !void {
+            try writer.print("# elvish completions for {s}\n", .{cmd.name});
+        }
+    }.render);
+
+    // The name is accepted as a value for the `shell` positional...
+    const ctx = try app.parseFrom(&.{ "completion", "elvish" });
+    try testing.expectEqualStrings("elvish", ctx.positional(0).?);
+
+    // ...and resolves back to exactly the renderer that was registered.
+    const renderer = app.custom_completions.get("elvish").?;
+    var buffer: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try renderer(&writer, app.root());
+    const expected = try std.fmt.allocPrint(testing.allocator, "# elvish completions for {s}\n", .{app.root().name});
+    defer testing.allocator.free(expected);
+    try testing.expectEqualStrings(expected, writer.buffered());
+}
+
 fn makeApp() !fangz.App {
     return fangz.App.init(testing.allocator, testing.io, .{
         .brief = "test app",

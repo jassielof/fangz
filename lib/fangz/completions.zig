@@ -12,8 +12,34 @@ pub const pwsh = @import("completions/pwsh.zig");
 pub const zsh = @import("completions/zsh.zig");
 const ParseContext = @import("ParseContext.zig");
 const ShellDetect = @import("ShellDetect.zig");
-// TODO: there should be a way to register custom full completion scripts, in case the user doesn't want Fangz to autogenerate it for them, and possibly they want to maintain it themselves. This way the user themself can add completions on their own, with custom logic, custom help, formatting, support non-standard shells, etc.
-// TODO: As well, add a toggle for Fangz to not generate completions at all, that way the user can opt-out in case they simply want a clean CLI help info. But the shell completions should be opt-out, by default they should always be generated for convenience.
+
+/// A completion-script renderer supplied by the host application, writing a full script for one shell.
+pub const CustomRenderer = *const fn (writer: *std.Io.Writer, root: *const Command) anyerror!void;
+
+/// Custom completion-script renderers registered through `App.registerCompletionRenderer`, keyed by shell name.
+///
+/// An entry named after a built-in shell (`bash`, `powershell`, ...) replaces that shell's generated script; any other name adds a shell Fangz has no built-in support for. Register before the app first parses: the names are merged into the `completion` command's accepted values when that command is registered, so names added afterward are not recognized.
+pub const CustomRenderers = struct {
+    entries: std.StringHashMapUnmanaged(CustomRenderer) = .empty,
+    /// Owned by this registry once `registerCompletionCommand` merges custom names into the `shell` positional; released by `deinit`.
+    merged_values: ?[]const []const u8 = null,
+    merged_labels: ?[]const []const u8 = null,
+
+    pub fn deinit(self: *CustomRenderers, allocator: std.mem.Allocator) void {
+        self.entries.deinit(allocator);
+        if (self.merged_values) |values| allocator.free(values);
+        if (self.merged_labels) |labels| allocator.free(labels);
+        self.* = .{};
+    }
+
+    pub fn get(self: *const CustomRenderers, name: []const u8) ?CustomRenderer {
+        return self.entries.get(name);
+    }
+};
+
+/// Set by `registerCompletionCommand` for `runCompletionCommand` to read back: a command hook only receives a `*ParseContext`, so per-app state that does not fit that signature is threaded through here instead, the same way `Parser.zig` threads diagnostic state through a `threadlocal`.
+threadlocal var active_custom_renderers: ?*const CustomRenderers = null;
+
 /// Supported shell targets for completion script generation.
 pub const Shell = enum {
     /// <https://www.gnu.org/software/bash/>
@@ -113,9 +139,11 @@ fn shellAllowedValueLabels() []const []const u8 {
     };
 }
 
-pub fn registerCompletionCommand(root: *Command) !void {
+pub fn registerCompletionCommand(root: *Command, allocator: std.mem.Allocator, custom: *CustomRenderers) !void {
     if (root.findSubcommand("completion") != null) return;
     if (root.findSubcommand("completions") != null) return;
+
+    active_custom_renderers = custom;
 
     const completion = try root.addSubcommand(.{
         .name = "completion",
@@ -125,17 +153,56 @@ pub fn registerCompletionCommand(root: *Command) !void {
 
     try completion.addAlias("completions");
 
+    const values = try mergedShellValues(allocator, custom);
+    custom.merged_values = values;
+    const labels = try mergedShellLabels(allocator, values.len);
+    custom.merged_labels = labels;
+
     try completion.addPositional(.{
         .name = "shell",
         .brief = "Target shell.",
         .default_hint = "the shell running this program",
-        .allowed_values = Shell.allowedValues(),
-        .allowed_value_labels = shellAllowedValueLabels(),
+        .allowed_values = values,
+        .allowed_value_labels = labels,
         .allowed_value_aliases = Shell.allowedValueAliases(),
         .allowed_values_style = .bullet_list,
     });
 
     completion.setHooks(.{ .run = runCompletionCommand });
+}
+
+/// The built-in shell names, plus any registered custom name that is not already one of them. The caller owns the result.
+fn mergedShellValues(allocator: std.mem.Allocator, custom: *const CustomRenderers) ![]const []const u8 {
+    var values = std.ArrayList([]const u8).empty;
+    errdefer values.deinit(allocator);
+
+    try values.appendSlice(allocator, Shell.allowedValues());
+
+    var it = custom.entries.keyIterator();
+    while (it.next()) |name| {
+        if (!containsName(values.items, name.*)) try values.append(allocator, name.*);
+    }
+
+    return values.toOwnedSlice(allocator);
+}
+
+fn containsName(names: []const []const u8, name: []const u8) bool {
+    for (names) |candidate| {
+        if (std.mem.eql(u8, candidate, name)) return true;
+    }
+    return false;
+}
+
+/// Display labels parallel to `values` (as returned by `mergedShellValues`): the built-in pretty name for a built-in shell, or a generic label for a name only a custom renderer supplies. The caller owns the result.
+fn mergedShellLabels(allocator: std.mem.Allocator, value_count: usize) ![]const []const u8 {
+    const builtin_labels = shellAllowedValueLabels();
+    const labels = try allocator.alloc([]const u8, value_count);
+    errdefer allocator.free(labels);
+
+    for (labels, 0..) |*label, i| {
+        label.* = if (i < builtin_labels.len) builtin_labels[i] else "Custom shell";
+    }
+    return labels;
 }
 
 pub fn runCompletionCommand(ctx: *ParseContext) !void {
@@ -148,7 +215,8 @@ fn detectShellOrExit(ctx: *ParseContext) []const u8 {
     const detection = ShellDetect.detect(ctx.allocator, ctx.io);
     if (detection == .shell) return detection.shell;
 
-    const message = describeDetectionFailure(ctx.allocator, ctx.command.root().name, detection) catch "error: could not tell which shell is running; name it explicitly.\n";
+    const allowed = ctx.command.positionals.items[0].allowed_values orelse Shell.allowedValues();
+    const message = describeDetectionFailure(ctx.allocator, ctx.command.root().name, detection, allowed) catch "error: could not tell which shell is running; name it explicitly.\n";
     var buffer: [1024]u8 = undefined;
     var err = std.Io.File.stderr().writer(ctx.io, &buffer);
     err.interface.writeAll(message) catch {};
@@ -156,8 +224,8 @@ fn detectShellOrExit(ctx: *ParseContext) []const u8 {
     std.process.exit(1);
 }
 
-/// The error shown when no shell could be chosen automatically. The caller owns the result.
-fn describeDetectionFailure(allocator: std.mem.Allocator, program: []const u8, detection: ShellDetect.Detection) ![]u8 {
+/// The error shown when no shell could be chosen automatically. `allowed` is every accepted shell name, built-in or custom. The caller owns the result.
+fn describeDetectionFailure(allocator: std.mem.Allocator, program: []const u8, detection: ShellDetect.Detection, allowed: []const []const u8) ![]u8 {
     var out: std.Io.Writer.Allocating = .init(allocator);
     errdefer out.deinit();
 
@@ -167,7 +235,7 @@ fn describeDetectionFailure(allocator: std.mem.Allocator, program: []const u8, d
     }
 
     try out.writer.print("Name the one you want: {s} completion <", .{program});
-    for (Shell.allowedValues(), 0..) |spelling, index| {
+    for (allowed, 0..) |spelling, index| {
         if (index != 0) try out.writer.writeByte('|');
         try out.writer.writeAll(spelling);
     }
@@ -177,31 +245,121 @@ fn describeDetectionFailure(allocator: std.mem.Allocator, program: []const u8, d
 }
 
 test "the failure message names the program and the shells to choose from" {
-    const unknown = try describeDetectionFailure(std.testing.allocator, "typm", .unknown);
+    const unknown = try describeDetectionFailure(std.testing.allocator, "typm", .unknown, Shell.allowedValues());
     defer std.testing.allocator.free(unknown);
     try std.testing.expectEqualStrings(
         "error: could not tell which shell is running typm.\nName the one you want: typm completion <bash|zsh|fish|powershell|nushell>\n",
         unknown,
     );
 
-    const unsupported = try describeDetectionFailure(std.testing.allocator, "typm", .{ .unsupported = "tcsh" });
+    const unsupported = try describeDetectionFailure(std.testing.allocator, "typm", .{ .unsupported = "tcsh" }, Shell.allowedValues());
     defer std.testing.allocator.free(unsupported);
     try std.testing.expect(std.mem.startsWith(u8, unsupported, "error: the shell running typm (tcsh) has no completion script.\n"));
     try std.testing.expect(std.mem.indexOf(u8, unsupported, "<bash|zsh|fish|powershell|nushell>") != null);
+
+    const with_custom = try describeDetectionFailure(std.testing.allocator, "typm", .unknown, &.{ "bash", "elvish" });
+    defer std.testing.allocator.free(with_custom);
+    try std.testing.expect(std.mem.indexOf(u8, with_custom, "<bash|elvish>") != null);
 }
 
+/// Prints the completion script for `shell` to standard output: a custom renderer registered under that name wins, otherwise `shell` must be one of the built-in `Shell` values.
 pub fn printCompletionScript(io: std.Io, root: *Command, shell: []const u8) !void {
-    const parsed_shell = Shell.parse(shell) orelse return error.InvalidEnumValue;
     var buf: [8192]u8 = undefined;
     var out = std.Io.File.stdout().writer(io, &buf);
 
-    try render(&out.interface, root, parsed_shell);
+    try renderNamed(&out.interface, root, shell, active_custom_renderers);
     try out.interface.flush();
 }
 
-// TODO: This function should be removed, wrapper-functions that call just one function shouldn't exist, just use render() directly.
-pub fn generateCompletions(root: *const Command, shell: Shell, writer: *std.Io.Writer) !void {
-    try render(writer, root, shell);
+/// Writes the completion script for `shell`: a custom renderer registered under that name in `custom` wins, otherwise `shell` must be one of the built-in `Shell` values.
+fn renderNamed(writer: *std.Io.Writer, root: *const Command, shell: []const u8, custom: ?*const CustomRenderers) !void {
+    if (custom) |registry| {
+        if (registry.get(shell)) |custom_render| return custom_render(writer, root);
+    }
+
+    const parsed_shell = Shell.parse(shell) orelse return error.InvalidEnumValue;
+    try render(writer, root, parsed_shell);
+}
+
+test "a custom renderer overrides the built-in script for that shell name" {
+    const allocator = std.testing.allocator;
+    var root = try Command.init(allocator, .{ .name = "acme" });
+    defer root.deinit();
+
+    var custom: CustomRenderers = .{};
+    defer custom.deinit(allocator);
+    try custom.entries.put(allocator, "bash", struct {
+        fn render_(writer: *std.Io.Writer, cmd: *const Command) !void {
+            try writer.print("# custom bash script for {s}\n", .{cmd.name});
+        }
+    }.render_);
+
+    var buffer: [256]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+    try renderNamed(&writer, &root, "bash", &custom);
+    try std.testing.expectEqualStrings("# custom bash script for acme\n", writer.buffered());
+}
+
+test "a custom renderer adds a shell name Fangz does not build in" {
+    const allocator = std.testing.allocator;
+    var root = try Command.init(allocator, .{ .name = "acme" });
+    defer root.deinit();
+
+    var custom: CustomRenderers = .{};
+    defer custom.deinit(allocator);
+    try custom.entries.put(allocator, "elvish", struct {
+        fn render_(writer: *std.Io.Writer, cmd: *const Command) !void {
+            try writer.print("# elvish script for {s}\n", .{cmd.name});
+        }
+    }.render_);
+
+    var buffer: [256]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+    try renderNamed(&writer, &root, "elvish", &custom);
+    try std.testing.expectEqualStrings("# elvish script for acme\n", writer.buffered());
+
+    // A name nothing recognizes is still rejected.
+    try std.testing.expectError(error.InvalidEnumValue, renderNamed(&writer, &root, "tcsh", &custom));
+}
+
+test "with no custom registry, only the built-in shells resolve" {
+    const allocator = std.testing.allocator;
+    var root = try Command.init(allocator, .{ .name = "acme" });
+    defer root.deinit();
+
+    var buffer: [256]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+    try renderNamed(&writer, &root, "bash", null);
+    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "_acme_completion") != null);
+    try std.testing.expectError(error.InvalidEnumValue, renderNamed(&writer, &root, "elvish", null));
+}
+
+test "registering a custom name merges it into the completion command's accepted shells" {
+    const allocator = std.testing.allocator;
+    var root = try Command.init(allocator, .{ .name = "acme" });
+    defer root.deinit();
+    defer active_custom_renderers = null;
+
+    var custom: CustomRenderers = .{};
+    defer custom.deinit(allocator);
+    try custom.entries.put(allocator, "elvish", struct {
+        fn render_(writer: *std.Io.Writer, cmd: *const Command) !void {
+            try writer.print("# elvish for {s}\n", .{cmd.name});
+        }
+    }.render_);
+    // Overriding a built-in name does not add a duplicate entry.
+    try custom.entries.put(allocator, "bash", struct {
+        fn render_(writer: *std.Io.Writer, cmd: *const Command) !void {
+            try writer.print("# custom bash for {s}\n", .{cmd.name});
+        }
+    }.render_);
+
+    try registerCompletionCommand(&root, allocator, &custom);
+
+    const completion = root.findSubcommand("completion").?;
+    const allowed = completion.positionals.items[0].allowed_values.?;
+    try std.testing.expect(containsName(allowed, "elvish"));
+    try std.testing.expectEqual(Shell.canonical_spellings.len + 1, allowed.len);
 }
 
 pub fn printDynamicSuggestions(io: std.Io, root: *Command, args: []const []const u8) !void {

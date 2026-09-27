@@ -32,6 +32,8 @@ owned_process_args: std.ArrayList([]const u8) = .empty,
 completions_enabled: bool = true,
 /// Whether the built-in completion command has already been registered.
 completion_registered: bool = false,
+/// Custom completion-script renderers registered through `registerCompletionRenderer`, keyed by shell name.
+custom_completions: Completion.CustomRenderers = .{},
 /// Whether the built-in docs command should be registered lazily.
 docs_enabled: bool = true,
 /// Whether the built-in docs command has already been registered.
@@ -97,6 +99,7 @@ pub fn deinit(self: *App) void {
     if (self.last_context) |*ctx| ctx.deinit();
     self.freeOwnedProcessArgs();
     self.root_command.deinit();
+    self.custom_completions.deinit(self.allocator);
 }
 
 /// Returns the mutable root command.
@@ -107,6 +110,13 @@ pub fn root(self: *App) *Command {
 /// Enables or disables built-in completion command registration.
 pub fn setCompletionsEnabled(self: *App, enabled: bool) void {
     self.completions_enabled = enabled;
+}
+
+/// Registers a custom completion-script renderer for `shell_name`.
+///
+/// A name matching a built-in shell (`bash`, `powershell`, `nu`, ...) replaces that shell's generated script; any other name adds a shell Fangz has no built-in support for, with custom logic, help text, and formatting entirely up to `renderer`. Call this before the app first parses, since the accepted shell names are fixed when the `completion` command is registered.
+pub fn registerCompletionRenderer(self: *App, shell_name: []const u8, renderer: Completion.CustomRenderer) !void {
+    try self.custom_completions.entries.put(self.allocator, shell_name, renderer);
 }
 
 /// Enables or disables the built-in docs command registration.
@@ -231,7 +241,7 @@ pub fn generateDocs(self: *App, options: DocGenerator.Options) !void {
 ///
 /// Use the `Shell` enum for type-safe shell selection.  The script delegates to the `__complete` runtime endpoint for dynamic suggestions.
 pub fn generateCompletions(self: *App, shell: Completion.Shell, writer: *std.Io.Writer) !void {
-    try Completion.generateCompletions(&self.root_command, shell, writer);
+    try Completion.render(writer, &self.root_command, shell);
 }
 
 /// Renders full help text (`--help`) for the given command to stdout.
@@ -342,7 +352,7 @@ fn printVersion(self: *App) !void {
 fn ensureCompletionCommand(self: *App) !void {
     if (!self.completions_enabled) return;
     if (self.completion_registered) return;
-    try Completion.registerCompletionCommand(self.root());
+    try Completion.registerCompletionCommand(self.root(), self.allocator, &self.custom_completions);
     self.completion_registered = true;
 }
 
