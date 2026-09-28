@@ -25,6 +25,14 @@ pub const Process = struct {
     name: []const u8,
 };
 
+/// A process name to recognize as a shell beyond the built-in table, for a shell registered through `App.registerCompletionRenderer`.
+///
+/// Detection assumes the running process is named after the registered shell name (e.g. a renderer registered as `"elvish"` is found by a process also named `elvish`), the same comparison as a built-in shell: lowercased, without a leading `-`, without a Windows `.exe` suffix. A shell whose executable is named differently will not be found this way; it still works when named explicitly (`app completion <name>`).
+pub const ExtraShell = struct {
+    process: []const u8,
+    spelling: []const u8,
+};
+
 const Class = union(enum) {
     shell: []const u8,
     blocker: []const u8,
@@ -47,8 +55,8 @@ const blockers = [_][]const u8{ "ksh", "mksh", "csh", "tcsh", "elvish", "xonsh",
 
 const max_depth = 16;
 
-/// Looks for the shell that launched this process.
-pub fn detect(allocator: std.mem.Allocator, io: std.Io) Detection {
+/// Looks for the shell that launched this process. `extra` lists shell names registered through `App.registerCompletionRenderer` that have no built-in entry, so they can also be found this way.
+pub fn detect(allocator: std.mem.Allocator, io: std.Io, extra: []const ExtraShell) Detection {
     var arena_state = std.heap.ArenaAllocator.init(allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -56,22 +64,22 @@ pub fn detect(allocator: std.mem.Allocator, io: std.Io) Detection {
     switch (builtin.os.tag) {
         .windows => {
             var provider = WindowsProvider.init(arena) orelse return .unknown;
-            return walk(&provider, std.os.windows.GetCurrentProcessId());
+            return walk(&provider, std.os.windows.GetCurrentProcessId(), extra);
         },
         .linux => {
             var provider: ProcProvider = .{ .arena = arena, .io = io };
-            return walk(&provider, @intCast(std.os.linux.getpid()));
+            return walk(&provider, @intCast(std.os.linux.getpid()), extra);
         },
         .macos, .freebsd, .netbsd, .openbsd, .dragonfly => {
             var provider: PsProvider = .{ .arena = arena, .io = io };
-            return walk(&provider, @intCast(std.c.getpid()));
+            return walk(&provider, @intCast(std.c.getpid()), extra);
         },
         else => return .unknown,
     }
 }
 
 /// Walks up from `own_pid`'s parent through `provider`, which answers `find(pid) ?Process`.
-pub fn walk(provider: anytype, own_pid: u32) Detection {
+pub fn walk(provider: anytype, own_pid: u32, extra: []const ExtraShell) Detection {
     const own = provider.find(own_pid) orelse return .unknown;
 
     var current = own.parent;
@@ -79,7 +87,7 @@ pub fn walk(provider: anytype, own_pid: u32) Detection {
     while (depth < max_depth) : (depth += 1) {
         const process = provider.find(current) orelse return .unknown;
 
-        switch (classify(process.name)) {
+        switch (classify(process.name, extra)) {
             .shell => |spelling| return .{ .shell = spelling },
             .blocker => |name| return .{ .unsupported = name },
             .other => {},
@@ -93,11 +101,14 @@ pub fn walk(provider: anytype, own_pid: u32) Detection {
     return .unknown;
 }
 
-fn classify(process_name: []const u8) Class {
+fn classify(process_name: []const u8, extra: []const ExtraShell) Class {
     var buffer: [64]u8 = undefined;
     const name = normalize(&buffer, process_name);
 
     for (supported) |entry| {
+        if (std.mem.eql(u8, name, entry.process)) return .{ .shell = entry.spelling };
+    }
+    for (extra) |entry| {
         if (std.mem.eql(u8, name, entry.process)) return .{ .shell = entry.spelling };
     }
     for (blockers) |blocker| {
@@ -278,33 +289,45 @@ const TableProvider = struct {
 };
 
 fn expectShell(expected: []const u8, processes: []const Process, own_pid: u32) !void {
+    return expectShellWithExtra(expected, processes, own_pid, &.{});
+}
+
+fn expectShellWithExtra(expected: []const u8, processes: []const Process, own_pid: u32, extra: []const ExtraShell) !void {
     var provider: TableProvider = .{ .processes = processes };
-    switch (walk(&provider, own_pid)) {
+    switch (walk(&provider, own_pid, extra)) {
         .shell => |spelling| try std.testing.expectEqualStrings(expected, spelling),
         else => return error.ShellNotDetected,
     }
 }
 
 test "classify recognizes shells however the OS spells their name" {
-    try std.testing.expectEqualStrings("bash", classify("bash").shell);
-    try std.testing.expectEqualStrings("bash", classify("-bash").shell);
-    try std.testing.expectEqualStrings("bash", classify("/usr/bin/bash").shell);
-    try std.testing.expectEqualStrings("bash", classify("C:\\Program Files\\Git\\usr\\bin\\bash.exe").shell);
-    try std.testing.expectEqualStrings("zsh", classify("/bin/zsh").shell);
-    try std.testing.expectEqualStrings("fish", classify("Fish").shell);
-    try std.testing.expectEqualStrings("powershell", classify("pwsh.exe").shell);
-    try std.testing.expectEqualStrings("powershell", classify("PowerShell.EXE").shell);
-    try std.testing.expectEqualStrings("nushell", classify("nu.exe").shell);
-    try std.testing.expectEqualStrings("nushell", classify("/home/u/.cargo/bin/nu").shell);
+    try std.testing.expectEqualStrings("bash", classify("bash", &.{}).shell);
+    try std.testing.expectEqualStrings("bash", classify("-bash", &.{}).shell);
+    try std.testing.expectEqualStrings("bash", classify("/usr/bin/bash", &.{}).shell);
+    try std.testing.expectEqualStrings("bash", classify("C:\\Program Files\\Git\\usr\\bin\\bash.exe", &.{}).shell);
+    try std.testing.expectEqualStrings("zsh", classify("/bin/zsh", &.{}).shell);
+    try std.testing.expectEqualStrings("fish", classify("Fish", &.{}).shell);
+    try std.testing.expectEqualStrings("powershell", classify("pwsh.exe", &.{}).shell);
+    try std.testing.expectEqualStrings("powershell", classify("PowerShell.EXE", &.{}).shell);
+    try std.testing.expectEqualStrings("nushell", classify("nu.exe", &.{}).shell);
+    try std.testing.expectEqualStrings("nushell", classify("/home/u/.cargo/bin/nu", &.{}).shell);
 }
 
 test "classify separates unsupported shells from ordinary programs" {
-    try std.testing.expectEqualStrings("tcsh", classify("/bin/tcsh").blocker);
-    try std.testing.expectEqualStrings("elvish", classify("elvish").blocker);
-    try std.testing.expect(classify("zig.exe") == .other);
-    try std.testing.expect(classify("WindowsTerminal.exe") == .other);
-    try std.testing.expect(classify("bashful") == .other);
-    try std.testing.expect(classify("") == .other);
+    try std.testing.expectEqualStrings("tcsh", classify("/bin/tcsh", &.{}).blocker);
+    try std.testing.expectEqualStrings("elvish", classify("elvish", &.{}).blocker);
+    try std.testing.expect(classify("zig.exe", &.{}) == .other);
+    try std.testing.expect(classify("WindowsTerminal.exe", &.{}) == .other);
+    try std.testing.expect(classify("bashful", &.{}) == .other);
+    try std.testing.expect(classify("", &.{}) == .other);
+}
+
+test "classify recognizes a registered shell name beyond the built-in table" {
+    const extra = [_]ExtraShell{.{ .process = "elvish", .spelling = "elvish" }};
+    try std.testing.expectEqualStrings("elvish", classify("elvish", &extra).shell);
+    try std.testing.expectEqualStrings("elvish", classify("/usr/bin/elvish", &extra).shell);
+    // Without being registered, the same name is still an unsupported blocker.
+    try std.testing.expectEqualStrings("elvish", classify("elvish", &.{}).blocker);
 }
 
 test "the nearest shell in the ancestry wins" {
@@ -338,6 +361,21 @@ test "command wrappers are skipped" {
     }, 3);
 }
 
+test "a registered custom shell is found the same way as a built-in one" {
+    const extra = [_]ExtraShell{.{ .process = "elvish", .spelling = "elvish" }};
+    try expectShellWithExtra("elvish", &.{
+        .{ .pid = 1, .parent = 0, .name = "/usr/bin/elvish" },
+        .{ .pid = 2, .parent = 1, .name = "typm" },
+    }, 2, &extra);
+
+    // Registering a name overrides it being an unsupported blocker.
+    const tcsh_extra = [_]ExtraShell{.{ .process = "tcsh", .spelling = "tcsh" }};
+    try expectShellWithExtra("tcsh", &.{
+        .{ .pid = 1, .parent = 0, .name = "/bin/tcsh" },
+        .{ .pid = 2, .parent = 1, .name = "typm" },
+    }, 2, &tcsh_extra);
+}
+
 test "an unsupported shell ends the search" {
     var provider: TableProvider = .{ .processes = &.{
         .{ .pid = 1, .parent = 0, .name = "bash" },
@@ -345,7 +383,7 @@ test "an unsupported shell ends the search" {
         .{ .pid = 3, .parent = 2, .name = "typm" },
     } };
 
-    try std.testing.expectEqualStrings("tcsh", walk(&provider, 3).unsupported);
+    try std.testing.expectEqualStrings("tcsh", walk(&provider, 3, &.{}).unsupported);
 }
 
 test "no shell in the ancestry is unknown" {
@@ -354,22 +392,22 @@ test "no shell in the ancestry is unknown" {
         .{ .pid = 2, .parent = 1, .name = "cron" },
         .{ .pid = 3, .parent = 2, .name = "typm" },
     } };
-    try std.testing.expect(walk(&provider, 3) == .unknown);
+    try std.testing.expect(walk(&provider, 3, &.{}) == .unknown);
 
     // A process whose own entry cannot be found is unknown too, not a crash.
-    try std.testing.expect(walk(&provider, 99) == .unknown);
+    try std.testing.expect(walk(&provider, 99, &.{}) == .unknown);
 }
 
 test "a parent that is missing or loops back cannot hang the walk" {
     var orphan: TableProvider = .{ .processes = &.{.{ .pid = 5, .parent = 4, .name = "typm" }} };
-    try std.testing.expect(walk(&orphan, 5) == .unknown);
+    try std.testing.expect(walk(&orphan, 5, &.{}) == .unknown);
 
     var loop: TableProvider = .{ .processes = &.{
         .{ .pid = 1, .parent = 2, .name = "a" },
         .{ .pid = 2, .parent = 1, .name = "b" },
         .{ .pid = 3, .parent = 2, .name = "typm" },
     } };
-    try std.testing.expect(walk(&loop, 3) == .unknown);
+    try std.testing.expect(walk(&loop, 3, &.{}) == .unknown);
 }
 
 test "parseStat reads the parent pid even when the command name is awkward" {

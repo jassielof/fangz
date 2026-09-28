@@ -212,7 +212,10 @@ pub fn runCompletionCommand(ctx: *ParseContext) !void {
 
 /// Picks the shell that launched this program. When that cannot be decided the user needs to say which one they mean, so print how and stop; returning an error here would surface as a stack trace in the host program.
 fn detectShellOrExit(ctx: *ParseContext) []const u8 {
-    const detection = ShellDetect.detect(ctx.allocator, ctx.io);
+    const extra = buildExtraShells(ctx.allocator, active_custom_renderers) catch &.{};
+    defer if (extra.len > 0) ctx.allocator.free(extra);
+
+    const detection = ShellDetect.detect(ctx.allocator, ctx.io, extra);
     if (detection == .shell) return detection.shell;
 
     const allowed = ctx.command.positionals.items[0].allowed_values orelse Shell.allowedValues();
@@ -222,6 +225,19 @@ fn detectShellOrExit(ctx: *ParseContext) []const u8 {
     err.interface.writeAll(message) catch {};
     err.interface.flush() catch {};
     std.process.exit(1);
+}
+
+/// Lets `ShellDetect` recognize a registered custom shell's process, on the assumption that its process is named after the registered shell name. The caller owns a non-empty result.
+fn buildExtraShells(allocator: std.mem.Allocator, custom: ?*const CustomRenderers) ![]const ShellDetect.ExtraShell {
+    const registry = custom orelse return &.{};
+    if (registry.entries.count() == 0) return &.{};
+
+    const extra = try allocator.alloc(ShellDetect.ExtraShell, registry.entries.count());
+    var it = registry.entries.keyIterator();
+    var i: usize = 0;
+    while (it.next()) |name| : (i += 1) extra[i] = .{ .process = name.*, .spelling = name.* };
+
+    return extra;
 }
 
 /// The error shown when no shell could be chosen automatically. `allowed` is every accepted shell name, built-in or custom. The caller owns the result.
@@ -279,6 +295,32 @@ fn renderNamed(writer: *std.Io.Writer, root: *const Command, shell: []const u8, 
 
     const parsed_shell = Shell.parse(shell) orelse return error.InvalidEnumValue;
     try render(writer, root, parsed_shell);
+}
+
+test "buildExtraShells lets ShellDetect recognize registered custom shells" {
+    const allocator = std.testing.allocator;
+
+    const none = try buildExtraShells(allocator, null);
+    try std.testing.expectEqual(@as(usize, 0), none.len);
+
+    var empty: CustomRenderers = .{};
+    defer empty.deinit(allocator);
+    const from_empty = try buildExtraShells(allocator, &empty);
+    try std.testing.expectEqual(@as(usize, 0), from_empty.len);
+
+    var custom: CustomRenderers = .{};
+    defer custom.deinit(allocator);
+    try custom.entries.put(allocator, "elvish", struct {
+        fn render_(writer: *std.Io.Writer, cmd: *const Command) !void {
+            try writer.print("# elvish for {s}\n", .{cmd.name});
+        }
+    }.render_);
+
+    const extra = try buildExtraShells(allocator, &custom);
+    defer allocator.free(extra);
+    try std.testing.expectEqual(@as(usize, 1), extra.len);
+    try std.testing.expectEqualStrings("elvish", extra[0].process);
+    try std.testing.expectEqualStrings("elvish", extra[0].spelling);
 }
 
 test "a custom renderer overrides the built-in script for that shell name" {
