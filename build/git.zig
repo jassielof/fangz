@@ -81,12 +81,12 @@ pub fn commitDate(b: *std.Build) ?[]const u8 {
 fn commitField(b: *std.Build, format_arg: []const u8) ?[]const u8 {
     if (!std.process.can_spawn) return null;
 
-    const git = b.findProgram(&.{"git"}, &.{}) catch return null;
+    const git = b.findProgram(.{ .names = &.{"git"} }) orelse return null;
     const result = std.process.run(b.allocator, b.graph.io, .{
         .argv = &.{
             git,
             "-C",
-            b.build_root.path orelse ".",
+            b.pathJoin(&.{ b.root.root_dir.path orelse ".", b.root.sub_path }),
             "show",
             "-s",
             format_arg,

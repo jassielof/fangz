@@ -32,7 +32,6 @@ pub fn buildDate(b: *std.Build) []const u8 {
 
 pub fn manifestVersion(b: *std.Build) ?[]const u8 {
     const manifest = manifestMetadata(b) orelse return null;
-    defer std.zon.parse.free(b.allocator, manifest);
 
     return if (manifest.version.len > 0) b.dupe(manifest.version) else null;
 }
@@ -48,38 +47,32 @@ pub fn manifestVersion(b: *std.Build) ?[]const u8 {
 /// - <https://ziggit.dev/t/adding-a-field-to-build-zig-build-zig-zon-for-the-zig-compiler-version-and-commit-used-to-init-the-project/7413>.
 pub fn manifestDescription(b: *std.Build) ?[]const u8 {
     const manifest = manifestMetadata(b) orelse return null;
-    defer std.zon.parse.free(b.allocator, manifest);
 
     return if (manifest.description.len > 0) b.dupe(manifest.description) else null;
 }
 
 fn manifestMetadata(b: *std.Build) ?PartialManifest {
-    const content = b.build_root.handle.readFileAlloc(
+    const content = b.root.root_dir.handle.readFileAlloc(
         b.graph.io,
-        "build.zig.zon",
+        b.pathJoin(&.{ b.root.sub_path, "build.zig.zon" }),
         b.allocator,
         .unlimited,
     ) catch return null;
     defer b.allocator.free(content);
 
-    const source = b.allocator.dupeZ(u8, content) catch return null;
+    const source = b.allocator.dupeSentinel(u8, content, 0) catch return null;
     defer b.allocator.free(source);
 
-    var diag: std.zon.parse.Diagnostics = .{};
-    defer diag.deinit(b.allocator);
+    var diag: std.zon.parse.Diagnostics = undefined;
 
-    const manifest = std.zon.parse.fromSliceAlloc(
-        PartialManifest,
-        b.allocator,
-        source,
-        &diag,
-        .{
-            .ignore_unknown_fields = true,
-            .free_on_error = true,
-        },
-    ) catch return null;
-
-    return manifest;
+    // The parsed strings live in the build graph's arena, which outlives the configure phase.
+    return std.zon.parse.fromSlice(PartialManifest, .{
+        .gpa = b.allocator,
+        .arena = b.graph.arena,
+        .source = source,
+        .diagnostics = &diag,
+        .ignore_unknown_fields = true,
+    }) catch null;
 }
 
 fn compileVersion(b: *std.Build, compile: *std.Build.Step.Compile) ?[]const u8 {
