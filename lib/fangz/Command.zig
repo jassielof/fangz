@@ -517,7 +517,7 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
             .int => .{ .int = default_value },
             .float => .{ .float = default_value },
             .string_list => .{ .string_list = default_value },
-            .enum_tag => .{ .enum_tag = @intFromEnum(default_value) },
+            .enum_tag => .{ .enum_tag = @backingInt(default_value) },
             .key_value_list => null,
         };
     }

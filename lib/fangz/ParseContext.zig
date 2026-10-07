@@ -112,7 +112,7 @@ pub fn enumFlag(self: *const ParseContext, comptime EnumType: type, name: []cons
 
     const value = self.flags.get(name) orelse return null;
     return switch (value) {
-        .enum_tag => |raw| @as(EnumType, @enumFromInt(raw)),
+        .enum_tag => |raw| @as(EnumType, @fromBackingInt(@intCast(raw))),
         else => null,
     };
 }
