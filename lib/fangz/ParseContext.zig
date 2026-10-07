@@ -174,21 +174,21 @@ fn isStringSlice(comptime T: type) bool {
     const info = @typeInfo(T);
     if (info != .pointer) return false;
     const ptr = info.pointer;
-    return ptr.size == .slice and ptr.is_const and ptr.child == u8;
+    return ptr.size == .slice and ptr.attrs.@"const" and ptr.child == u8;
 }
 
 fn isStringListType(comptime T: type) bool {
     const info = @typeInfo(T);
     if (info != .pointer) return false;
     const ptr = info.pointer;
-    return ptr.size == .slice and ptr.is_const and isStringSlice(ptr.child);
+    return ptr.size == .slice and ptr.attrs.@"const" and isStringSlice(ptr.child);
 }
 
 fn isKeyValueListType(comptime T: type) bool {
     const info = @typeInfo(T);
     if (info != .pointer) return false;
     const ptr = info.pointer;
-    return ptr.size == .slice and ptr.is_const and ptr.child == Command.KeyValuePair;
+    return ptr.size == .slice and ptr.attrs.@"const" and ptr.child == Command.KeyValuePair;
 }
 
 fn assignFieldValue(
@@ -299,26 +299,24 @@ pub fn extract(self: *const ParseContext, comptime T: type) !T {
 
     var out: T = undefined;
 
-    inline for (info.@"struct".fields) |field| {
-        const FieldType = field.type;
-
-        if (comptime std.mem.eql(u8, field.name, "positionals")) {
+    inline for (info.@"struct".field_names, info.@"struct".field_types, info.@"struct".field_attrs) |name, FieldType, attrs| {
+        if (comptime std.mem.eql(u8, name, "positionals")) {
             if (FieldType != []const []const u8) {
                 @compileError("field 'positionals' must be []const []const u8");
             }
 
-            @field(out, field.name) = self.positionals.items;
+            @field(out, name) = self.positionals.items;
 
             continue;
         }
 
-        const assigned = try assignFieldValue(self, &out, field.name, FieldType);
+        const assigned = try assignFieldValue(self, &out, name, FieldType);
 
         if (!assigned) {
-            if (field.defaultValue()) |default_ptr| {
-                @field(out, field.name) = default_ptr;
+            if (attrs.defaultValue(FieldType)) |default_value| {
+                @field(out, name) = default_value;
             } else if (comptime isOptional(FieldType)) {
-                @field(out, field.name) = null;
+                @field(out, name) = null;
             } else {
                 return error.MissingRequiredFlag;
             }
