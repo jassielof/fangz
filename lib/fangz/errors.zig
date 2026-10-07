@@ -23,9 +23,9 @@ pub const Error = std.mem.Allocator.Error || Parser.ParseError || error{
 ///
 /// Uses `@typeInfo(Parser.ParseError).error_set` so adding a variant to [`Parser.ParseError`] does not require updating a second manual list.
 pub fn asParseError(err: Error) ?Parser.ParseError {
-    const entries = @typeInfo(Parser.ParseError).error_set orelse return null;
-    inline for (entries) |entry| {
-        const pe = @field(Parser.ParseError, entry.name);
+    const names = @typeInfo(Parser.ParseError).error_set.error_names orelse return null;
+    inline for (names) |name| {
+        const pe = @field(Parser.ParseError, name);
         if (err == pe) return pe;
     }
     return null;
