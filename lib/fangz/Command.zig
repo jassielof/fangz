@@ -162,14 +162,14 @@ fn isStringSlice(comptime T: type) bool {
     const ptr = info.pointer;
     if (ptr.size != .slice) return false;
 
-    return ptr.child == u8 and ptr.is_const;
+    return ptr.child == u8 and ptr.attrs.@"const";
 }
 
 fn isStringListType(comptime T: type) bool {
     const info = @typeInfo(T);
     if (info != .pointer) return false;
     const ptr = info.pointer;
-    if (ptr.size != .slice or !ptr.is_const) return false;
+    if (ptr.size != .slice or !ptr.attrs.@"const") return false;
 
     return isStringSlice(ptr.child);
 }
@@ -178,7 +178,7 @@ fn isKeyValueListType(comptime T: type) bool {
     const info = @typeInfo(T);
     if (info != .pointer) return false;
     const ptr = info.pointer;
-    if (ptr.size != .slice or !ptr.is_const) return false;
+    if (ptr.size != .slice or !ptr.attrs.@"const") return false;
 
     return ptr.child == KeyValuePair;
 }
@@ -235,10 +235,10 @@ fn EnumTagNameTable(comptime EnumType: type) type {
 
     return struct {
         pub const values = blk: {
-            const fields = info.@"enum".fields;
-            var names: [fields.len][]const u8 = undefined;
-            for (fields, 0..) |field, i| {
-                names[i] = field.name;
+            const field_names = info.@"enum".field_names;
+            var names: [field_names.len][]const u8 = undefined;
+            for (field_names, 0..) |name, i| {
+                names[i] = name;
             }
             break :blk names;
         };
@@ -254,11 +254,11 @@ fn EnumTagValueTable(comptime EnumType: type) type {
 
     return struct {
         pub const values = blk: {
-            const fields = info.@"enum".fields;
-            var enum_values: [fields.len]u32 = undefined;
+            const field_values = info.@"enum".field_values;
+            var enum_values: [field_values.len]u32 = undefined;
 
-            for (fields, 0..) |field, i| {
-                enum_values[i] = @intCast(field.value);
+            for (field_values, 0..) |value, i| {
+                enum_values[i] = @intCast(value);
             }
 
             break :blk enum_values;
