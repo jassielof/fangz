@@ -81,6 +81,7 @@ pub fn renderFlagMetadata(
     is_global: bool,
     continuation_pad: usize,
     enum_tag_name: []const u8,
+    env_name: ?[]const u8,
 ) !void {
     var tags_buf: [4][]const u8 = undefined;
     var tag_count: usize = 0;
@@ -124,6 +125,10 @@ pub fn renderFlagMetadata(
 
     if (shouldRenderDefaultLine(flag, default_in_list)) {
         try renderDefaultLine(writer, profile, continuation_pad, flag, enum_tag_name);
+    }
+
+    if (env_name) |name| {
+        try renderMetaText(writer, profile, continuation_pad, "Env", name);
     }
 }
 
@@ -259,8 +264,13 @@ fn renderDefaultLine(
 
 /// Writes one `Default: <value>` metadata line, the same for flags and positionals.
 fn renderDefaultText(writer: *std.Io.Writer, profile: ColorProfile, pad: usize, value: []const u8) !void {
+    try renderMetaText(writer, profile, pad, "Default", value);
+}
+
+/// Writes one `<Label>: <value>` metadata line.
+fn renderMetaText(writer: *std.Io.Writer, profile: ColorProfile, pad: usize, label: []const u8, value: []const u8) !void {
     try printSpaces(writer, pad);
-    try metaLabelStyle().renderWithProfile("Default", writer, profile);
+    try metaLabelStyle().renderWithProfile(label, writer, profile);
     try writer.print(": ", .{});
     try metaValueStyle().renderWithProfile(value, writer, profile);
     try writer.print("\n", .{});

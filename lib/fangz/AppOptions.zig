@@ -28,6 +28,8 @@ author_name: AuthorSource = .git,
 author_email: AuthorSource = .git,
 /// Source date used by generated documentation. Defaults to the injected Git commit date, falling back to the build date.
 source_date: ?[]const u8 = null,
+/// Prefix for environment variables derived from flag names, as in `DOCENT_CONFIG_PATH` for `--config-path`. Only flags declared with `.env = .derived` use it.
+env_prefix: []const u8 = "",
 /// Short git commit hash. Defaults to the injected value from `injectMeta`.
 /// Pass `""` to suppress from `--version` output.
 commit: ?[]const u8 = null,

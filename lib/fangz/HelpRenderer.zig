@@ -300,7 +300,7 @@ fn renderFlags(writer: *std.Io.Writer, command: *const Command, profile: ColorPr
     }
 
     for (command.flags.constSlice()) |flag| {
-        try renderOneFlag(writer, flag, false, profile, spec_width, terminal_width, command.allocator, mode);
+        try renderOneFlag(writer, command, flag, false, profile, spec_width, terminal_width, command.allocator, mode);
     }
 
     if (command.parent) |parent| {
@@ -309,7 +309,7 @@ fn renderFlags(writer: *std.Io.Writer, command: *const Command, profile: ColorPr
         for (chain.items) |ancestor| {
             for (ancestor.flags.constSlice()) |flag| {
                 if (!flag.persistent) continue;
-                try renderOneFlag(writer, flag, true, profile, spec_width, terminal_width, command.allocator, mode);
+                try renderOneFlag(writer, command, flag, true, profile, spec_width, terminal_width, command.allocator, mode);
             }
         }
     }
@@ -323,6 +323,7 @@ fn renderFlags(writer: *std.Io.Writer, command: *const Command, profile: ColorPr
 /// Renders one option line with metadata annotations.
 fn renderOneFlag(
     writer: *std.Io.Writer,
+    command: *const Command,
     flag: Command.Flag,
     is_global: bool,
     profile: ColorProfile,
@@ -387,7 +388,8 @@ fn renderOneFlag(
             .enum_tag => |ordinal| enumTagName(flag, ordinal),
             else => "",
         } else "";
-        try HelpMetadata.renderFlagMetadata(writer, profile, flag, is_global, continuation_pad, enum_name);
+        var env_buf: [256]u8 = undefined;
+        try HelpMetadata.renderFlagMetadata(writer, profile, flag, is_global, continuation_pad, enum_name, command.envName(flag, &env_buf));
     }
 
     // In full-help mode, render long prose indented below the row.

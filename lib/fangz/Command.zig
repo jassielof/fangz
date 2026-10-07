@@ -96,6 +96,18 @@ pub const DefaultValue = union(enum) {
     enum_tag: u32,
 };
 
+/// Where a flag reads its value from when argv does not set it.
+///
+/// Precedence is argv, then the environment, then the flag's default.
+pub const EnvSource = union(enum) {
+    /// The flag is only set from argv.
+    none,
+    /// `<PREFIX>_<FLAG>`: the app's `env_prefix` and the flag name, upper-cased with `-` as `_`.
+    derived,
+    /// This exact environment variable.
+    name: []const u8,
+};
+
 /// Controls how `allowed_values` are rendered in help output.
 pub const AllowedValuesStyle = enum {
     /// Up to three values on one line; four or more as a bullet list.
@@ -119,6 +131,8 @@ pub const Flag = struct {
     /// When true, the flag also accepts a `--no-<name>` form that sets it false.
     /// Only valid for boolean flags.
     negatable: bool = false,
+    /// Environment variable consulted when the flag is absent from argv.
+    env: EnvSource = .none,
     default_value: ?DefaultValue = null,
     allowed_values: ?[]const []const u8 = null,
     enum_values: ?[]const u32 = null,
@@ -208,6 +222,8 @@ pub fn FlagOptions(comptime T: type) type {
         persistent: bool = false,
         /// Accept `--no-<name>` form to set the flag false.  Only valid for bool flags.
         negatable: bool = false,
+        /// Environment variable consulted when the flag is absent from argv. Lists are comma-separated; booleans accept `1`/`0`, `true`/`false`, `yes`/`no` and `on`/`off`; an empty value counts as unset.
+        env: EnvSource = .none,
         default: ?Base = null,
         multi: bool = false,
         value_hint: ?[]const u8 = null,
@@ -369,6 +385,8 @@ git_commit: []const u8,
 /// Source date used by generated documentation.
 source_date: []const u8,
 group_id: ?[]const u8,
+/// Prefix for derived environment variable names; read from the root command.
+env_prefix: []const u8 = "",
 aliases: std.ArrayList([]const u8),
 groups: std.ArrayList(Group),
 /// Inline flag storage — no heap allocation for CLIs with ≤MAX_INLINE_FLAGS flags.
@@ -414,6 +432,7 @@ pub fn init(allocator: Allocator, cfg: InitOptions) !Command {
         .git_commit = cfg.git_commit,
         .source_date = cfg.source_date,
         .group_id = cfg.group_id,
+        .env_prefix = cfg.env_prefix,
         .hidden = cfg.hidden,
         .aliases = try std.ArrayList([]const u8).initCapacity(allocator, 2),
         .groups = try std.ArrayList(Group).initCapacity(allocator, 2),
@@ -492,6 +511,7 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
         .required = opts.required,
         .persistent = opts.persistent,
         .negatable = opts.negatable,
+        .env = opts.env,
         .allowed_keys = opts.allowed_keys,
         .value_hint = opts.value_hint,
         .allowed_values_style = opts.allowed_values_style,
@@ -531,6 +551,32 @@ pub fn addFlag(self: *Command, comptime T: type, opts: FlagOptions(T)) !void {
     self.flags.append(flag) catch return error.TooManyFlags;
     try self.flag_by_name.put(flag.name, idx);
     if (flag.short) |short| try self.flag_by_short.put(short, idx);
+}
+
+/// Returns the environment variable `flag` reads, or null when it has none.
+///
+/// A derived name is written into `buf`; null is also returned when it does not fit.
+pub fn envName(self: *const Command, flag: Flag, buf: []u8) ?[]const u8 {
+    return switch (flag.env) {
+        .none => null,
+        .name => |name| name,
+        .derived => deriveEnvName(self.rootConst().env_prefix, flag.name, buf),
+    };
+}
+
+fn deriveEnvName(prefix: []const u8, flag_name: []const u8, buf: []u8) ?[]const u8 {
+    const separator: []const u8 = if (prefix.len > 0) "_" else "";
+
+    var len: usize = 0;
+    for ([_][]const u8{ prefix, separator, flag_name }) |part| {
+        for (part) |byte| {
+            if (len == buf.len) return null;
+            buf[len] = if (byte == '-') '_' else std.ascii.toUpper(byte);
+            len += 1;
+        }
+    }
+
+    return buf[0..len];
 }
 
 /// Adds an already-built flag descriptor and updates lookup registries.

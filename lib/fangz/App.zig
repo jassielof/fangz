@@ -26,6 +26,8 @@ io: std.Io,
 root_command: Command,
 /// Most recent parse context retained for caller inspection.
 last_context: ?ParseContext = null,
+/// Environment consulted for flags declared with `env`; borrowed, see `setEnvironment`.
+environ: ?*const std.process.Environ.Map = null,
 /// Process arguments owned by the app after `parseProcess`.
 owned_process_args: std.ArrayList([]const u8) = .empty,
 /// Whether the built-in completion command should be registered lazily.
@@ -90,6 +92,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, cfg: AppOptions) Error!App
             .git_branch = branch,
             .git_commit = commit,
             .source_date = source_date,
+            .env_prefix = cfg.env_prefix,
         }),
     };
 }
@@ -105,6 +108,13 @@ pub fn deinit(self: *App) void {
 /// Returns the mutable root command.
 pub fn root(self: *App) *Command {
     return &self.root_command;
+}
+
+/// Supplies the environment that flags declared with `env` read from.
+///
+/// The map is borrowed and must outlive every parse. Without it, environment variables are ignored.
+pub fn setEnvironment(self: *App, environ: *const std.process.Environ.Map) void {
+    self.environ = environ;
 }
 
 /// Enables or disables built-in completion command registration.
@@ -133,7 +143,7 @@ pub fn parseFrom(self: *App, argv: []const []const u8) Error!*ParseContext {
     self.last_context = null;
     self.freeOwnedProcessArgs();
 
-    const output = try Parser.parse(self.allocator, self.io, self.root(), argv);
+    const output = try Parser.parseWithEnvironment(self.allocator, self.io, self.root(), argv, self.environ);
     self.last_context = output.context;
     return &self.last_context.?;
 }
@@ -148,7 +158,7 @@ pub fn parseProcess(self: *App, process_args: std.process.Args) Error!*ParseCont
     self.freeOwnedProcessArgs();
 
     try self.collectProcessArgsInto(process_args, &self.owned_process_args);
-    const output = try Parser.parse(self.allocator, self.io, self.root(), self.owned_process_args.items);
+    const output = try Parser.parseWithEnvironment(self.allocator, self.io, self.root(), self.owned_process_args.items, self.environ);
     self.last_context = output.context;
     return &self.last_context.?;
 }

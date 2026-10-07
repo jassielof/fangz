@@ -24,6 +24,8 @@ git_commit: []const u8 = "",
 /// Source date used by generated documentation.
 source_date: []const u8 = "",
 group_id: ?[]const u8 = null,
+/// Prefix for environment variable names derived from flag names (`.env = .derived`). Only the root command's value is used.
+env_prefix: []const u8 = "",
 /// When true, omit from generated docs unless `include_hidden` is set.
 hidden: bool = false,
 

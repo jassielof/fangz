@@ -906,3 +906,121 @@ fn makeApp() !fangz.App {
         .version = "1.2.3",
     });
 }
+fn initEnvApp(app: *fangz.App) !void {
+    app.* = try fangz.App.init(testing.allocator, testing.io, .{
+        .display_name = "Env Demo",
+        .env_prefix = "demo",
+    });
+    app.setCompletionsEnabled(false);
+    app.setDocsEnabled(false);
+}
+
+test "environment fills flags that argv leaves unset" {
+    var app: fangz.App = undefined;
+    try initEnvApp(&app);
+    defer app.deinit();
+
+    try app.root().addFlag([]const u8, .{ .name = "config-path", .env = .derived });
+    try app.root().addFlag(i64, .{ .name = "jobs", .env = .{ .name = "BUILD_JOBS" } });
+    try app.root().addFlag(bool, .{ .name = "verbose", .env = .derived });
+    try app.root().addFlag([]const []const u8, .{ .name = "tag", .env = .derived, .multi = true });
+
+    var environ = std.process.Environ.Map.init(testing.allocator);
+    defer environ.deinit();
+    try environ.put("DEMO_CONFIG_PATH", "from-env.toml");
+    try environ.put("BUILD_JOBS", "8");
+    try environ.put("DEMO_VERBOSE", "Yes");
+    try environ.put("DEMO_TAG", "a,b,,c");
+    app.setEnvironment(&environ);
+
+    const ctx = try app.parseFrom(&.{});
+    try testing.expectEqualStrings("from-env.toml", ctx.stringFlag("config-path").?);
+    try testing.expectEqual(@as(i64, 8), ctx.intFlag("jobs").?);
+    try testing.expectEqual(true, ctx.boolFlag("verbose").?);
+    try testing.expectEqual(@as(usize, 3), ctx.stringListFlag("tag").?.len);
+    try testing.expect(!ctx.wasFlagProvided("config-path"));
+}
+
+test "argv wins over the environment and the environment wins over defaults" {
+    var app: fangz.App = undefined;
+    try initEnvApp(&app);
+    defer app.deinit();
+
+    try app.root().addFlag([]const u8, .{ .name = "mode", .env = .derived, .default = "debug" });
+    try app.root().addFlag([]const u8, .{ .name = "color", .env = .derived, .default = "auto" });
+    try app.root().addFlag([]const u8, .{ .name = "shell", .env = .derived, .default = "sh" });
+
+    var environ = std.process.Environ.Map.init(testing.allocator);
+    defer environ.deinit();
+    try environ.put("DEMO_MODE", "release");
+    try environ.put("DEMO_COLOR", "never");
+    app.setEnvironment(&environ);
+
+    const ctx = try app.parseFrom(&.{ "--mode", "fast" });
+    try testing.expectEqualStrings("fast", ctx.stringFlag("mode").?);
+    try testing.expectEqualStrings("never", ctx.stringFlag("color").?);
+    try testing.expectEqualStrings("sh", ctx.stringFlag("shell").?);
+}
+
+test "environment satisfies required flags and an empty value counts as unset" {
+    var app: fangz.App = undefined;
+    try initEnvApp(&app);
+    defer app.deinit();
+
+    try app.root().addFlag([]const u8, .{ .name = "token", .env = .derived, .required = true });
+
+    var environ = std.process.Environ.Map.init(testing.allocator);
+    defer environ.deinit();
+    app.setEnvironment(&environ);
+
+    try testing.expectError(error.MissingRequiredFlag, app.parseFrom(&.{}));
+
+    try environ.put("DEMO_TOKEN", "");
+    try testing.expectError(error.MissingRequiredFlag, app.parseFrom(&.{}));
+
+    try environ.put("DEMO_TOKEN", "secret");
+    const ctx = try app.parseFrom(&.{});
+    try testing.expectEqualStrings("secret", ctx.stringFlag("token").?);
+}
+
+test "invalid environment values are rejected like argv values" {
+    var app: fangz.App = undefined;
+    try initEnvApp(&app);
+    defer app.deinit();
+
+    try app.root().addFlag(i64, .{ .name = "jobs", .env = .derived });
+    try app.root().addFlag(bool, .{ .name = "quiet", .env = .derived });
+
+    var environ = std.process.Environ.Map.init(testing.allocator);
+    defer environ.deinit();
+    app.setEnvironment(&environ);
+
+    try environ.put("DEMO_JOBS", "many");
+    try testing.expectError(error.InvalidInt, app.parseFrom(&.{}));
+
+    try environ.put("DEMO_JOBS", "2");
+    try environ.put("DEMO_QUIET", "maybe");
+    try testing.expectError(error.InvalidBool, app.parseFrom(&.{}));
+}
+
+test "flags without env ignore the environment and help names the variable" {
+    var app: fangz.App = undefined;
+    try initEnvApp(&app);
+    defer app.deinit();
+
+    try app.root().addFlag([]const u8, .{ .name = "plain" });
+    try app.root().addFlag([]const u8, .{ .name = "out-dir", .env = .derived });
+
+    var environ = std.process.Environ.Map.init(testing.allocator);
+    defer environ.deinit();
+    try environ.put("DEMO_PLAIN", "ignored");
+    app.setEnvironment(&environ);
+
+    const ctx = try app.parseFrom(&.{});
+    try testing.expect(ctx.stringFlag("plain") == null);
+
+    var buf: [8192]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .full);
+    try testing.expect(std.mem.indexOf(u8, writer.buffered(), "Env: DEMO_OUT_DIR") != null);
+}

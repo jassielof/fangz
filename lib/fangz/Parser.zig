@@ -18,6 +18,7 @@ pub const ParseError = error{
     TooManyPositionals,
     InvalidInt,
     InvalidFloat,
+    InvalidBool,
     InvalidEnumValue,
     KeyValueMissingEquals,
     KeyValueEmptyKey,
@@ -90,8 +91,19 @@ fn takeKeyValueNote() ?KeyValueParseNote {
     return n;
 }
 
-/// Parses argv against the command tree and returns a parse output context.
+/// Parses argv against the command tree and returns a parse output context. Environment variables are ignored; see `parseWithEnvironment`.
 pub fn parse(allocator: std.mem.Allocator, io: std.Io, root: *Command, argv: []const []const u8) !ParseOutput {
+    return parseWithEnvironment(allocator, io, root, argv, null);
+}
+
+/// Like `parse`, but flags declared with `env` and absent from argv are read from `environ`.
+pub fn parseWithEnvironment(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    root: *Command,
+    argv: []const []const u8,
+    environ: ?*const std.process.Environ.Map,
+) !ParseOutput {
     // freeze() is called by App before parsing; fall back to bindAliases here only when Parser is used directly without going through App.
     if (!root.frozen) try root.bindAliases();
 
@@ -135,6 +147,8 @@ pub fn parse(allocator: std.mem.Allocator, io: std.Io, root: *Command, argv: []c
     if (ctx.help_requested or ctx.short_help_requested or ctx.version_requested) {
         return .{ .context = ctx };
     }
+
+    if (environ) |map| try applyEnvironment(allocator, &ctx, dispatch.command, map);
 
     try validatePositionals(&ctx);
     try validateRequiredFlags(&ctx);
@@ -451,6 +465,85 @@ fn applyDefaults(ctx: *ParseContext, command: *Command) !void {
     }
 }
 
+/// Fills flags that argv left unset from their environment variables, so argv always wins.
+///
+/// Values are converted and validated like argv values, but do not count as "provided" for
+/// mutual exclusion. An empty variable counts as unset.
+fn applyEnvironment(
+    allocator: std.mem.Allocator,
+    ctx: *ParseContext,
+    command: *Command,
+    environ: *const std.process.Environ.Map,
+) !void {
+    var chain = try command.collectAncestorPath(ctx.allocator);
+    defer chain.deinit(ctx.allocator);
+
+    var name_buf: [256]u8 = undefined;
+    for (chain.items) |cmd| {
+        for (cmd.flags.constSlice()) |flag| {
+            if (cmd != command and !flag.persistent) continue;
+            if (ctx.provided_flags.contains(flag.name)) continue;
+
+            const env_name = cmd.envName(flag, &name_buf) orelse continue;
+            const raw = environ.get(env_name) orelse continue;
+            if (raw.len == 0) continue;
+
+            try setFromEnvironment(allocator, ctx, flag, raw);
+            _ = ctx.provided_flags.remove(flag.name);
+        }
+    }
+}
+
+fn setFromEnvironment(
+    allocator: std.mem.Allocator,
+    ctx: *ParseContext,
+    flag: Command.Flag,
+    raw: []const u8,
+) !void {
+    var no_tokens = Tokenizer.init(&.{});
+
+    switch (flag.value_type) {
+        .bool => {
+            const parsed = parseBoolText(raw) orelse return ParseError.InvalidBool;
+            try setFlagValue(allocator, ctx, flag, .{ .bool = parsed });
+        },
+        .string_list, .key_value_list => {
+            // Replace any default list with the comma-separated items.
+            if (ctx.flags.fetchRemove(flag.name)) |removed| {
+                var previous = removed.value;
+                previous.deinit(allocator);
+            }
+
+            var items = std.mem.splitScalar(
+                u8,
+                raw,
+                ',',
+            );
+            while (items.next()) |item| {
+                if (item.len == 0) continue;
+                try parseFlagValue(allocator, ctx, flag, item, &no_tokens);
+            }
+        },
+        else => try parseFlagValue(allocator, ctx, flag, raw, &no_tokens),
+    }
+}
+
+/// Parses the boolean spellings accepted from the environment, case-insensitively.
+fn parseBoolText(text: []const u8) ?bool {
+    const truthy = [_][]const u8{ "1", "true", "yes", "on", "y", "t" };
+    const falsy = [_][]const u8{ "0", "false", "no", "off", "n", "f" };
+
+    for (truthy) |candidate| {
+        if (std.ascii.eqlIgnoreCase(text, candidate)) return true;
+    }
+
+    for (falsy) |candidate| {
+        if (std.ascii.eqlIgnoreCase(text, candidate)) return false;
+    }
+
+    return null;
+}
+
 /// Validates positional arity, requireds, and variadic policy.
 fn validatePositionals(ctx: *ParseContext) !void {
     const defs = ctx.command.positionals.items;
@@ -538,6 +631,7 @@ pub fn diagnoseError(
         error.TooManyPositionals => makeDiagnostic(allocator, "too many positional arguments", null),
         error.InvalidInt => makeDiagnostic(allocator, "expected int value for flag", null),
         error.InvalidFloat => makeDiagnostic(allocator, "expected float value for flag", null),
+        error.InvalidBool => makeDiagnostic(allocator, "expected a boolean value (true, false, 1, 0, yes, no, on, off) for flag", null),
         error.InvalidEnumValue => diagnoseInvalidValue(allocator),
         error.KeyValueMissingEquals,
         error.KeyValueEmptyKey,
