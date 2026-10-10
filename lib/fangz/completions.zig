@@ -151,6 +151,8 @@ pub fn registerCompletionCommand(root: *Command, allocator: std.mem.Allocator, c
         .description = "Prints a completion script for a shell. Without an argument it uses the shell that launched this program, found by walking up the process tree.",
     });
 
+    completion.is_builtin = true;
+
     try completion.addAlias("completions");
 
     const values = try mergedShellValues(allocator, custom);

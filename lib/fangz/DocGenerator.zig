@@ -235,6 +235,8 @@ pub fn registerDocsCommand(root: *Command) !void {
         .brief = "Print AsciiDoc documentation for this CLI to standard output",
     });
 
+    docs.is_builtin = true;
+
     docs.setHooks(.{ .run = runDocsCommand });
 }
 

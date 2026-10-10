@@ -91,9 +91,6 @@ pub fn render(
     }
 
     if (command.subcommands.items.len > 0) {
-        try writer.print("\n", .{});
-        try carnaval.Style.init().bolded().renderWithProfile("Commands:", writer, profile);
-        try writer.print("\n", .{});
         try renderSubcommands(writer, command, profile, terminal_width, mode);
     }
 
@@ -226,10 +223,21 @@ fn renderSubcommands(writer: *std.Io.Writer, command: *const Command, profile: C
         if (sub.name.len > cmd_width) cmd_width = sub.name.len;
     }
 
+    var has_application_commands = false;
+    for (command.subcommands.items) |sub| {
+        if (!sub.is_builtin) has_application_commands = true;
+    }
+    if (has_application_commands) {
+        try writer.print("\n", .{});
+        try carnaval.Style.init().bolded().renderWithProfile("Commands:", writer, profile);
+        try writer.print("\n", .{});
+    }
+
     var rendered_group_section = false;
     for (command.groups.items) |group| {
         var has_in_group = false;
         for (command.subcommands.items) |sub| {
+            if (sub.is_builtin) continue;
             if (sub.group_id) |gid| {
                 if (std.mem.eql(u8, gid, group.id)) {
                     has_in_group = true;
@@ -244,6 +252,7 @@ fn renderSubcommands(writer: *std.Io.Writer, command: *const Command, profile: C
         try carnaval.Style.init().bolded().renderWithProfile(group.title, writer, profile);
         try writer.print(":\n", .{});
         for (command.subcommands.items) |sub| {
+            if (sub.is_builtin) continue;
             if (sub.group_id) |gid| {
                 if (std.mem.eql(u8, gid, group.id)) {
                     const desc = try subcommandDescription(command.allocator, sub, profile);
@@ -256,16 +265,26 @@ fn renderSubcommands(writer: *std.Io.Writer, command: *const Command, profile: C
 
     const default_indent = if (rendered_group_section) "    " else "  ";
     for (command.subcommands.items) |sub| {
-        if (sub.group_id != null) continue;
+        if (sub.is_builtin or sub.group_id != null) continue;
         const desc = try subcommandDescription(command.allocator, sub, profile);
         defer command.allocator.free(desc);
         try printAlignedCommandRow(writer, profile, default_indent, sub.name, desc, cmd_width, terminal_width, command.allocator);
     }
 
+    try writer.print("\n", .{});
+    try carnaval.Style.init().bolded().renderWithProfile("Built-in commands:", writer, profile);
+    try writer.print("\n", .{});
+    for (command.subcommands.items) |sub| {
+        if (!sub.is_builtin) continue;
+        const desc = try subcommandDescription(command.allocator, sub, profile);
+        defer command.allocator.free(desc);
+        try printAlignedCommandRow(writer, profile, "  ", sub.name, desc, cmd_width, terminal_width, command.allocator);
+    }
+
     try printAlignedCommandRow(
         writer,
         profile,
-        default_indent,
+        "  ",
         "help",
         "Print this message or the help of the given subcommand(s)",
         cmd_width,

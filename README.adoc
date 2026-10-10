@@ -142,6 +142,12 @@ per-flag descriptions, per-subcommand descriptions, and examples. This
 mirrors Cobra’s design, where `--help` and `help ++<++cmd++>++` are
 interchangeable.
 
+Both modes separate application commands under *Commands:* from Fangz utilities
+under *Built-in commands:* (+docs+, +completion+, and +help+). Aliases stay beside
+their command. Application command groups retain their own headings, and
+application-provided overrides of +docs+ or +completion+ remain application
+commands. Disabled utilities are omitted.
+
 === Three tiers of help content
 
 Every flag and command accepts three tiers of content, each mapped to a

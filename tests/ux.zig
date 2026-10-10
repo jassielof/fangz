@@ -1024,3 +1024,78 @@ test "flags without env ignore the environment and help names the variable" {
     try fangz.HelpRenderer.render(&writer, app.root(), .none, .full);
     try testing.expect(std.mem.indexOf(u8, writer.buffered(), "Env: DEMO_OUT_DIR") != null);
 }
+
+test "help separates built-ins from grouped application commands in both modes" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{});
+    defer app.deinit();
+    try app.root().addGroup(.{ .id = "fonts", .title = "Fonts" });
+    _ = try app.root().addSubcommand(.{ .name = "list", .brief = "List fonts.", .group_id = "fonts" });
+    _ = try app.root().addSubcommand(.{ .name = "backup", .brief = "Copy fonts." });
+    _ = try app.parseFrom(&.{"--help"});
+
+    for ([_]fangz.HelpRenderer.HelpMode{ .short, .full }) |mode| {
+        var buf: [8192]u8 = undefined;
+        var writer = std.Io.Writer.fixed(&buf);
+        try fangz.HelpRenderer.render(&writer, app.root(), .none, mode);
+        const text = writer.buffered();
+        const boundary = std.mem.indexOf(u8, text, "\nBuilt-in commands:\n") orelse return error.MissingBuiltins;
+        const commands = text[0..boundary];
+        const builtins = text[boundary..];
+        try testing.expect(std.mem.indexOf(u8, commands, "\nCommands:\n  Fonts:\n") != null);
+        try testing.expect(std.mem.indexOf(u8, commands, "List fonts.") != null);
+        try testing.expect(std.mem.indexOf(u8, commands, "Copy fonts.") != null);
+        try testing.expect(std.mem.indexOf(u8, commands, "completion") == null);
+        try testing.expect(std.mem.indexOf(u8, commands, "docs") == null);
+        try testing.expect(std.mem.indexOf(u8, builtins, "completion") != null);
+        try testing.expect(std.mem.indexOf(u8, builtins, "(alias: completions)") != null);
+        try testing.expect(std.mem.indexOf(u8, builtins, "docs") != null);
+        try testing.expect(std.mem.indexOf(u8, builtins, "Print this message") != null);
+    }
+}
+
+test "application docs and completion overrides are not labeled built-in" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{});
+    defer app.deinit();
+    _ = try app.root().addSubcommand(.{ .name = "docs", .brief = "Application documents." });
+    _ = try app.root().addSubcommand(.{ .name = "completion", .brief = "Application completion." });
+    _ = try app.parseFrom(&.{"--help"});
+    var buf: [8192]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .full);
+    const text = writer.buffered();
+    const boundary = std.mem.indexOf(u8, text, "\nBuilt-in commands:\n") orelse return error.MissingBuiltins;
+    try testing.expect(std.mem.indexOf(u8, text[0..boundary], "Application documents.") != null);
+    try testing.expect(std.mem.indexOf(u8, text[0..boundary], "Application completion.") != null);
+    try testing.expect(std.mem.indexOf(u8, text[boundary..], "Application") == null);
+}
+
+test "help with only built-ins omits an empty application section" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{});
+    defer app.deinit();
+    _ = try app.parseFrom(&.{"--help"});
+    var buf: [8192]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try fangz.HelpRenderer.render(&writer, app.root(), .none, .short);
+    try testing.expect(std.mem.indexOf(u8, writer.buffered(), "\nCommands:\n") == null);
+    try testing.expect(std.mem.indexOf(u8, writer.buffered(), "\nBuilt-in commands:\n") != null);
+}
+
+test "disabled utilities stay absent while nested help remains built-in" {
+    var app = try fangz.App.init(testing.allocator, testing.io, .{});
+    defer app.deinit();
+    app.setDocsEnabled(false);
+    app.setCompletionsEnabled(false);
+    const fonts = try app.root().addSubcommand(.{ .name = "fonts" });
+    _ = try fonts.addSubcommand(.{ .name = "list", .brief = "List fonts." });
+    _ = try app.parseFrom(&.{"--help"});
+    for ([_]*const fangz.Command{ app.root(), fonts }) |command| {
+        var buf: [8192]u8 = undefined;
+        var writer = std.Io.Writer.fixed(&buf);
+        try fangz.HelpRenderer.render(&writer, command, .none, .full);
+        const text = writer.buffered();
+        try testing.expect(std.mem.indexOf(u8, text, "\nBuilt-in commands:\n") != null);
+        try testing.expect(std.mem.indexOf(u8, text, "Print this message") != null);
+        try testing.expect(std.mem.indexOf(u8, text, "completion") == null);
+        try testing.expect(std.mem.indexOf(u8, text, "docs") == null);
+    }
+}

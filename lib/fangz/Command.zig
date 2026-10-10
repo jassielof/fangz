@@ -385,6 +385,8 @@ git_commit: []const u8,
 /// Source date used by generated documentation.
 source_date: []const u8,
 group_id: ?[]const u8,
+/// Set by Fangz when registering its own utility commands; independent of application groups.
+is_builtin: bool = false,
 /// Prefix for derived environment variable names; read from the root command.
 env_prefix: []const u8 = "",
 aliases: std.ArrayList([]const u8),
